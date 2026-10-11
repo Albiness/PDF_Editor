@@ -1,1094 +1,210 @@
-# \# 📄 Ultra PDF Editor
+<div align="center">
+
+# 📄 PDF Editor
+
+**A fast, privacy-friendly PDF editor for mobile, built with Flutter.**
+Draw, highlight, add text and photos, rotate, reorder and merge pages — then save or share in a tap.
+
+![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)
+![Material 3](https://img.shields.io/badge/Material-3-6750A4?logo=materialdesign&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-lightgrey)
+![Offline](https://img.shields.io/badge/works-100%25%20offline-success)
+
+<!-- Replace with real screenshots -->
+<!-- <img src="docs/screenshots/editor.png" width="260"> <img src="docs/screenshots/tools.png" width="260"> -->
+
+</div>
+
+---
+
+## ✨ Overview
+
+PDF Editor turns your phone into a lightweight PDF workshop. Open a PDF, a photo, or even a plain text file — everything is converted into a PDF on the fly, so **one editor handles every format**. All processing happens on-device: your documents never leave your phone unless you share them.
+
+## 🚀 Features
+
+### 📂 Open almost anything
+| Type | Supported formats |
+|------|-------------------|
+| **PDF** | `.pdf` |
+| **Images** | `jpg`, `jpeg`, `png`, `webp`, `bmp`, `gif`, `heic`, `heif` |
+| **Text** | `txt`, `md`, `log`, `csv`, `tsv`, `json`, `xml`, `yaml`, `yml`, `ini`, `conf` |
+
+- 🔍 **Smart format detection** — the file type is detected by its *signature (magic bytes)*, not just the extension, so files without an extension (e.g. received from other apps) still open correctly.
+- 🖼️ **Photo → PDF** — each photo becomes a page with the same aspect ratio (no white borders). Large images are downscaled to keep the PDF small; HEIC/HEIF (iPhone photos) are supported.
+- 📝 **Text → PDF** — plain-text files are paginated into a clean PDF (with safety limits on size and page count).
+- 🔗 **Open from other apps** — receive files via the system "Open with" flow through a platform channel.
+- 🕘 **Recent documents** — the last 20 files are cached locally with quick re-open, per-item removal and "clear all".
+
+### ✏️ Annotation tools
+| Tool | What it does |
+|------|--------------|
+| 🖊️ **Pen** | Freehand drawing, adjustable width (1–12 pt), 5-colour palette (red, black, blue, green, purple) |
+| 🖍️ **Highlighter** | Wide translucent yellow stroke rendered with the **Multiply** blend mode — text stays readable while the background is tinted |
+| 🔤 **Text labels** | Tap anywhere to add multi-line text, font size 10–48 pt, any palette colour. Tap to **edit**, drag to **move**, or delete |
+| 🏞️ **Photos & stamps** | Insert an image from the gallery, drag it, **resize with a corner handle**, or delete it |
+| ↩️ **Undo / Redo** | One unified history for strokes, text and photos |
 
-# 
+### 📑 Page management
+- 🔄 **Rotate** pages left or right (90° steps) — annotations rotate together with the page
+- ⬆️⬇️ **Reorder** pages by moving the current page up or down
+- 🗑️ **Delete** pages (the last remaining page is protected)
+- ➕ **Add pages from another file** — append pages from another PDF, photo or text file to build one document (e.g. merge several photos into a single PDF)
+- 🔢 Page indicator pill with previous / next navigation
+
+### 🔎 Viewing & navigation
+- **Pinch-to-zoom** (1×–3×) plus zoom in / zoom out / reset controls
+- **Crisp zoom** — the viewer is re-laid out at the zoomed size, so the PDF is re-rendered sharply instead of just being stretched
+- Smooth two-finger pan while zoomed
+- Built-in **text selection** (copy etc.) that doesn't conflict with the back button
 
-# A Flutter-based PDF editor designed primarily for Android, with support for viewing, drawing, adding text, rearranging pages, rotating pages, zooming, and saving edited PDF documents.
+### 💾 Save & share
+- **Save as PDF** through the system file picker
+- **Share** the document via the native share sheet; if there are unsaved edits, you choose whether to share the edited version or the original
+- Smart file naming (`edited_<name>.pdf`) and sanitisation of unsafe characters
+- **Unsaved-changes protection** — confirmation dialogs before leaving or opening another file
 
-# 
+### 🌍 UI & polish
+- Material 3 design with a dedicated indigo colour scheme, light & dark mode
+- Fully **localised** UI (Flutter `l10n` / ARB) with in-app language switching
+- Floating snackbars, rounded dialogs, tooltips and a clean empty state with quick actions
 
-# The application focuses on keeping annotations visually attached to the PDF page even when pages are zoomed, rotated, or rearranged.
+---
+
+## 🧠 How it works
 
-# 
+### Everything becomes a PDF
+Any opened file is routed through a single pipeline:
 
-# \---
+```
+ file bytes ──▶ signature detection ──▶ PDF / image / text
+                                          │        │       │
+                                          ▼        ▼       ▼
+                                        as-is   _imageToPdf  _textToPdf
+                                          └────────┴───────┘
+                                                   ▼
+                                       Syncfusion PDF viewer + editor
+```
 
-# 
+This means drawing, text, zoom, rotation, reordering and saving work identically for every format — no per-format viewers required.
 
-# \## ✨ Features
+### WYSIWYG annotations
+- All edits live in **one ordered list**, which is what makes undo/redo behave consistently across strokes, text and photos.
+- Coordinates are stored **normalised (0..1) in the original, unrotated page space**, so annotations follow the page when it is rotated, moved or deleted.
+- Text labels are rasterised at **3× pixel ratio** and use the *same padding and font metrics* for the on-screen preview and the saved PNG — what you see is exactly what you get.
+- Placed items (text/photos) store a centre point and a quarter-turn offset, so a label added on an already-rotated page looks upright and rotates with the page afterwards.
+- On save, strokes, highlights, text and photos are **baked into the PDF page graphics**; the highlighter uses a real `PdfBlendMode.multiply` with transparency.
 
-# 
+### Safe, race-free editing
+- Heavy operations (rotate / move / delete / save) run through an **exclusive executor** (`_busy` flag) to prevent double-tap races on the same bytes.
+- Page re-ordering recreates pages with **zero margins** to avoid the 40 pt shift that default margins would accumulate.
+- Viewer page events are suppressed right after reloads to avoid the viewer briefly reporting the wrong page.
 
-# \### 📂 PDF Files
+---
 
-# 
+## 🛠️ Tech stack
 
-# \- Open PDF documents from device storage.
+| Package | Purpose |
+|---------|---------|
+| [`flutter`](https://flutter.dev) | UI framework (Material 3) |
+| [`syncfusion_flutter_pdf`](https://pub.dev/packages/syncfusion_flutter_pdf) | Creating & editing PDF documents, baking annotations |
+| [`syncfusion_flutter_pdfviewer`](https://pub.dev/packages/syncfusion_flutter_pdfviewer) | PDF rendering & text selection |
+| [`file_picker`](https://pub.dev/packages/file_picker) | Opening and saving files |
+| [`share_plus`](https://pub.dev/packages/share_plus) | Native share sheet |
+| [`path_provider`](https://pub.dev/packages/path_provider) | Local storage for recent documents |
+| `flutter_localizations` / `intl` | Localisation |
 
-# \- Display multi-page PDF documents.
+---
 
-# \- Save the edited document as a new PDF file.
+## 📦 Getting started
 
-# \- Detect loading and processing states.
+### Prerequisites
+- Flutter SDK (stable channel)
+- Android Studio / Xcode for device builds
 
-# \- Confirmation before opening another file when unsaved changes exist.
+### Installation
 
-# 
+```bash
+# 1. Clone the repository
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
 
-# \---
+# 2. Install dependencies
+flutter pub get
 
-# 
+# 3. Generate localisation files
+flutter gen-l10n
 
-# \## 🔍 Zoom \& Navigation
+# 4. Run
+flutter run
+```
 
-# 
+### Using the editor screen in your own app
 
-# The editor supports custom PDF zooming designed for touch screens.
+```dart
+import 'pdf_editor_screen.dart';
 
-# 
+MaterialApp(
+  home: PdfEditorScreen(
+    onLanguageChanged: (Locale locale) {
+      // update your app's locale here
+    },
+  ),
+);
+```
 
-# \### Gestures
+`PdfEditorScreen` wraps itself in its own theme, so it looks identical regardless of the host app's theme.
 
-# 
 
-# \- \*\*Pinch with two fingers\*\* to zoom from \*\*100% to 300%\*\*.
+### Open-with integration (optional)
+The screen listens on the `pdf_editor/open_file` platform channel. Send the file bytes with the `openPdf` method from your native side (Android intent / iOS document handler) to open files shared from other apps.
 
-# \- \*\*Drag with one finger\*\* to move around the page while zoomed in.
+---
 
-# \- \*\*Double tap\*\* the page to return to the full-page view.
+## 🗂️ Project structure
 
-# \- Tap the displayed zoom percentage to reset zoom to \*\*100%\*\*.
+```
+lib/
+├── l10n/                    # ARB files & generated localisations
+└── pdf_editor_screen.dart   # Editor: format detection, conversion,
+                             # annotations, zoom, page tools, save/share,
+                             # recent documents
+```
 
-# 
+Key building blocks inside the editor:
 
-# \### Zoom Controls
+- **File layer** — `_detectFileKind`, `_convertToPdf`, `_imageToPdf`, `_textToPdf`
+- **Models** — `_StrokeAnnotation`, `_TextAnnotation`, `_ImageAnnotation`
+- **Rendering** — `_StrokePainter`, `_Placement` (shared preview/save geometry)
+- **Services** — `_RecentDocumentsService` (local history, max 20 items)
+- **UI** — `_PdfEditorView`, `_AddTextDialog`, `_ToolButton`, `_ColorDot`
 
-# 
+---
 
-# Buttons in the bottom-right corner provide:
+## 🗺️ Roadmap
 
-# 
+- [ ] Eraser tool
+- [ ] Shapes (rectangle, arrow, line)
+- [ ] Digital signature
+- [ ] Page thumbnails grid
+- [ ] Password-protected PDFs
+- [ ] Export pages as images
 
-# \- `+` — Zoom in.
+---
 
-# \- `−` — Zoom out.
+## 🤝 Contributing
 
-# \- `%` — Current zoom level / reset zoom.
+Contributions, issues and feature requests are welcome!
 
-# 
+1. Fork the project
+2. Create your branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m "Add amazing feature"`
+4. Push: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
-# After a pinch gesture finishes, the PDF page is rendered again at the new size instead of simply stretching the existing image. This keeps PDF text and graphics sharp.
+---
 
-# 
-
-# While the fingers are moving, the page may temporarily look slightly blurred. Once the gesture finishes, the page is re-rendered and becomes sharp again.
-
-# 
-
-# \---
-
-# 
-
-# \## 📖 Page Navigation
-
-# 
-
-# When the document is zoomed in, normal page-swiping is disabled so that horizontal gestures can be used for moving around the enlarged page.
-
-# 
-
-# Page navigation is available through the page counter at the top of the editor:
-
-# 
-
-# ```text
-
-# ‹   2 / 5   ›
-
-# ```
-
-# 
-
-# \- Left arrow — previous page.
-
-# \- Right arrow — next page.
-
-# \- Changing the page resets the zoom.
-
-# \- The first page cannot be moved further upward.
-
-# \- The last page cannot be moved further downward.
-
-# 
-
-# \---
-
-# 
-
-# \## ✏️ Drawing
-
-# 
-
-# The editor includes freehand drawing directly over PDF pages.
-
-# 
-
-# Features:
-
-# 
-
-# \- Draw using touch input.
-
-# \- Tap once in drawing mode to create a dot.
-
-# \- Draw while the page is zoomed.
-
-# \- Drawing remains attached to the PDF page.
-
-# \- Drawings follow page rotation.
-
-# \- Drawings follow pages when their order is changed.
-
-# \- Drawings are permanently written into the PDF when the file is saved.
-
-# 
-
-# \### Pen customization
-
-# 
-
-# The editor provides several pen colors:
-
-# 
-
-# \- 🔴 Red
-
-# \- ⚫ Black
-
-# \- 🔵 Blue
-
-# \- 🟢 Green
-
-# \- 🟣 Purple
-
-# 
-
-# The line thickness can also be adjusted using a slider.
-
-# 
-
-# \---
-
-# 
-
-# \## 📝 Text Annotations
-
-# 
-
-# Text can be added directly to any position on a PDF page.
-
-# 
-
-# Features:
-
-# 
-
-# \- Tap on the page to select the text position.
-
-# \- Custom font size.
-
-# \- Multiple lines of text.
-
-# \- Different text colors.
-
-# \- Drag text to another position.
-
-# \- Tap existing text to edit it.
-
-# \- Long-press existing text to delete it.
-
-# \- Text stays attached to the page during rotation and page reordering.
-
-# \- Unicode text can be saved, including Cyrillic and Slovak characters.
-
-# 
-
-# When saving, text is rendered and embedded into the PDF so the saved document visually matches the editor preview.
-
-# 
-
-# \---
-
-# 
-
-# \## ↩️ Undo \& Redo
-
-# 
-
-# The editor has a common editing history for drawings and text.
-
-# 
-
-# Supported actions:
-
-# 
-
-# \- \*\*Undo\*\* the most recent change on the current page.
-
-# \- \*\*Redo\*\* previously undone changes.
-
-# 
-
-# Adding a new edit after an undo clears the redo history, following standard editor behavior.
-
-# 
-
-# \---
-
-# 
-
-# \## 🔄 Page Rotation
-
-# 
-
-# PDF pages can be rotated in both directions.
-
-# 
-
-# Available actions:
-
-# 
-
-# \- Rotate 90° clockwise.
-
-# \- Rotate 90° counter-clockwise.
-
-# 
-
-# Possible orientations:
-
-# 
-
-# ```text
-
-# 0° → 90° → 180° → 270°
-
-# ```
-
-# 
-
-# Drawings and text use page-relative coordinates, allowing them to stay attached to their original location when the page orientation changes.
-
-# 
-
-# \---
-
-# 
-
-# \## ↕️ Page Reordering
-
-# 
-
-# Pages can be moved forward or backward inside the document.
-
-# 
-
-# For example:
-
-# 
-
-# ```text
-
-# Page 1
-
-# Page 2
-
-# Page 3
-
-# ```
-
-# 
-
-# can be changed to:
-
-# 
-
-# ```text
-
-# Page 2
-
-# Page 1
-
-# Page 3
-
-# ```
-
-# 
-
-# Annotations belonging to the moved page are remapped together with the page.
-
-# 
-
-# The application also prevents invalid operations:
-
-# 
-
-# \- Page 1 cannot be moved further upward.
-
-# \- The last page cannot be moved further downward.
-
-# \- Editing controls are temporarily disabled while a document operation is being processed.
-
-# 
-
-# \---
-
-# 
-
-# \## 🗑️ Page Deletion
-
-# 
-
-# Individual pages can be removed from a PDF.
-
-# 
-
-# Before deletion, the application displays a confirmation dialog.
-
-# 
-
-# Deleting a page also:
-
-# 
-
-# \- removes annotations belonging to that page;
-
-# \- recalculates annotation page indexes;
-
-# \- preserves edits on the remaining pages.
-
-# 
-
-# The application prevents deletion if the document contains only one page.
-
-# 
-
-# \---
-
-# 
-
-# \## 💾 Saving
-
-# 
-
-# When saving the document:
-
-# 
-
-# 1\. Current PDF page modifications are collected.
-
-# 2\. Drawing annotations are rendered into their corresponding pages.
-
-# 3\. Text annotations are rendered into their corresponding pages.
-
-# 4\. The resulting PDF document is generated.
-
-# 5\. Android displays the system save dialog.
-
-# 6\. The saved file becomes the current version inside the editor.
-
-# 
-
-# Temporary drawing and text overlays are removed after saving because they are already physically embedded in the resulting PDF.
-
-# 
-
-# Example generated filename:
-
-# 
-
-# ```text
-
-# edited\_1760202345123.pdf
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## 🛡️ Unsaved Changes Protection
-
-# 
-
-# The editor keeps track of document modifications.
-
-# 
-
-# When unsaved edits exist:
-
-# 
-
-# \- an indicator appears in the application header;
-
-# \- closing the editor asks for confirmation;
-
-# \- opening another PDF asks for confirmation.
-
-# 
-
-# Example:
-
-# 
-
-# ```text
-
-# Unsaved changes
-
-# 
-
-# All unsaved edits will be lost.
-
-# Continue?
-
-# 
-
-# \[ Cancel ] \[ Continue ]
-
-# ```
-
-# 
-
-# This prevents accidental loss of work.
-
-# 
-
-# \---
-
-# 
-
-# \## 📊 Document Status
-
-# 
-
-# The interface displays:
-
-# 
-
-# \- current page number;
-
-# \- total number of pages;
-
-# \- current zoom percentage;
-
-# \- selected editing tool;
-
-# \- unsaved changes state;
-
-# \- document loading state;
-
-# \- document processing state.
-
-# 
-
-# During longer operations such as saving, rotating, deleting, or moving pages, a loading indicator is displayed and conflicting actions are temporarily disabled.
-
-# 
-
-# \---
-
-# 
-
-# \## 📱 Mobile UI
-
-# 
-
-# The application is designed with touch-screen use in mind.
-
-# 
-
-# Main editor controls include:
-
-# 
-
-# | Control | Function |
-
-# |---|---|
-
-# | 📂 | Open PDF |
-
-# | 💾 | Save PDF |
-
-# | ✏️ | Drawing mode |
-
-# | `T` | Add text |
-
-# | ↩️ | Undo |
-
-# | ↪️ | Redo |
-
-# | ↺ | Rotate left |
-
-# | ↻ | Rotate right |
-
-# | ↑ | Move page up |
-
-# | ↓ | Move page down |
-
-# | 🗑️ | Delete page |
-
-# | `+` | Zoom in |
-
-# | `−` | Zoom out |
-
-# 
-
-# Controls automatically become unavailable when their action is not possible.
-
-# 
-
-# \---
-
-# 
-
-# \## 🎨 Interface
-
-# 
-
-# The application uses Material Design with a custom color scheme.
-
-# 
-
-# The editor contains:
-
-# 
-
-# \- top application bar;
-
-# \- PDF viewport;
-
-# \- floating page counter;
-
-# \- zoom controls;
-
-# \- bottom editing toolbar;
-
-# \- dialogs for text and destructive actions;
-
-# \- loading indicators;
-
-# \- snack-bar notifications.
-
-# 
-
-# \---
-
-# 
-
-# \## 🧠 Coordinate System
-
-# 
-
-# One of the important parts of the project is annotation positioning.
-
-# 
-
-# Drawing and text coordinates are not stored as raw phone-screen pixels.
-
-# 
-
-# Instead, annotations are stored relative to the original PDF page.
-
-# 
-
-# Conceptually:
-
-# 
-
-# ```text
-
-# Screen position
-
-# &#x20;     ↓
-
-# Displayed PDF page position
-
-# &#x20;     ↓
-
-# Normalized page coordinates
-
-# &#x20;     ↓
-
-# Original PDF page coordinates
-
-# ```
-
-# 
-
-# This allows annotations to remain connected to the page when:
-
-# 
-
-# \- the screen size changes;
-
-# \- the page is rotated;
-
-# \- the page is zoomed;
-
-# \- pages are reordered.
-
-# 
-
-# \---
-
-# 
-
-# \## 🛠️ Technologies
-
-# 
-
-# The project is built using:
-
-# 
-
-# \- \*\*Flutter\*\*
-
-# \- \*\*Dart\*\*
-
-# \- \*\*Android / Kotlin\*\*
-
-# \- \*\*Syncfusion Flutter PDF Viewer\*\*
-
-# \- \*\*Syncfusion Flutter PDF\*\*
-
-# \- \*\*File Picker\*\*
-
-# 
-
-# Main packages:
-
-# 
-
-# ```yaml
-
-# file\_picker
-
-# syncfusion\_flutter\_pdfviewer
-
-# syncfusion\_flutter\_pdf
-
-# path\_provider
-
-# signature
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## 📁 Project Structure
-
-# 
-
-# ```text
-
-# pdf\_editor\_android/
-
-# │
-
-# ├── android/
-
-# │   └── Android-specific configuration
-
-# │
-
-# ├── ios/
-
-# │   └── iOS project files
-
-# │
-
-# ├── lib/
-
-# │   ├── main.dart
-
-# │   └── pdf\_editor\_screen.dart
-
-# │
-
-# ├── linux/
-
-# ├── macos/
-
-# ├── web/
-
-# ├── windows/
-
-# ├── test/
-
-# │
-
-# ├── pubspec.yaml
-
-# ├── pubspec.lock
-
-# ├── analysis\_options.yaml
-
-# └── README.md
-
-# ```
-
-# 
-
-# The main PDF editor implementation is located in:
-
-# 
-
-# ```text
-
-# lib/pdf\_editor\_screen.dart
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## 🚀 Running the Project
-
-# 
-
-# \### Requirements
-
-# 
-
-# Make sure Flutter is installed:
-
-# 
-
-# ```bash
-
-# flutter doctor
-
-# ```
-
-# 
-
-# Install project dependencies:
-
-# 
-
-# ```bash
-
-# flutter pub get
-
-# ```
-
-# 
-
-# Check available devices:
-
-# 
-
-# ```bash
-
-# flutter devices
-
-# ```
-
-# 
-
-# Run the project:
-
-# 
-
-# ```bash
-
-# flutter run
-
-# ```
-
-# 
-
-# To run on a specific Android device:
-
-# 
-
-# ```bash
-
-# flutter run -d <device-id>
-
-# ```
-
-# 
-
-# Example:
-
-# 
-
-# ```bash
-
-# flutter run -d EAZPTW494D4HQOBQ
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## 📱 Running on a Physical Android Device
-
-# 
-
-# 1\. Enable \*\*Developer options\*\* on the Android phone.
-
-# 2\. Enable \*\*USB debugging\*\*.
-
-# 3\. Connect the phone to the computer using USB.
-
-# 4\. Accept the USB debugging authorization dialog.
-
-# 5\. Check the device:
-
-# 
-
-# ```bash
-
-# flutter devices
-
-# ```
-
-# 
-
-# 6\. Run:
-
-# 
-
-# ```bash
-
-# flutter run -d <device-id>
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## 🔧 Debug Commands
-
-# 
-
-# Hot reload:
-
-# 
-
-# ```text
-
-# r
-
-# ```
-
-# 
-
-# Hot restart:
-
-# 
-
-# ```text
-
-# R
-
-# ```
-
-# 
-
-# Stop the application:
-
-# 
-
-# ```text
-
-# q
-
-# ```
-
-# 
-
-# Clean the project:
-
-# 
-
-# ```bash
-
-# flutter clean
-
-# ```
-
-# 
-
-# Restore packages:
-
-# 
-
-# ```bash
-
-# flutter pub get
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## 📦 Android Build
-
-# 
-
-# Create a debug APK:
-
-# 
-
-# ```bash
-
-# flutter build apk --debug
-
-# ```
-
-# 
-
-# Create a release APK:
-
-# 
-
-# ```bash
-
-# flutter build apk --release
-
-# ```
-
-# 
-
-# Generated APK files can be found under:
-
-# 
-
-# ```text
-
-# build/app/outputs/flutter-apk/
-
-# ```
-
-# 
-
-# \---
-
-# 
-
-# \## ⚠️ Current Limitations
-
-# 
-
-# The application is a custom lightweight PDF editor rather than a complete replacement for professional desktop PDF software.
-
-# 
-
-# Current editing focuses mainly on:
-
-# 
-
-# \- freehand drawing;
-
-# \- custom text;
-
-# \- page rotation;
-
-# \- page deletion;
-
-# \- page reordering;
-
-# \- zoom and navigation.
-
-# 
-
-# Annotations are flattened into the PDF during saving, which ensures visual consistency but means they are no longer independently editable after reopening the saved file.
-
-# 
-
-# \---
-
-# 
-
-# \## 🔮 Possible Future Improvements
-
-# 
-
-# Possible future features include:
-
-# 
-
-# \- text highlighting;
-
-# \- image insertion;
-
-# \- shapes and arrows;
-
-# \- eraser tool;
-
-# \- annotation selection;
-
-# \- copy/paste annotations;
-
-# \- page thumbnails;
-
-# \- PDF search;
-
-# \- form editing;
-
-# \- password-protected PDF support;
-
-# \- document metadata editing;
-
-# \- automatic saving;
-
-# \- recent documents;
-
-# \- dark mode;
-
-# \- opening PDFs directly through Android \*\*Open with\*\* integration.
-
-# 
-
-# \---
-
-# 
-
-# \## 📄 License
-
-# 
-
-# This project was created for educational and development purposes.
-
-# 
-
-# \---
-
-# 
-
-# \## 👨‍💻 Author
-
-# 
-
-# Developed as a Flutter PDF editing project with a focus on mobile interaction, page manipulation, accurate annotation positioning, and PDF document processing.
-
+<div align="center">
+Made with ❤️ and Flutter
+</div>
