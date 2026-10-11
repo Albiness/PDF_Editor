@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -11,6 +10,12 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'l10n/app_localizations.dart';
+
+
+extension _L10nContext on BuildContext {
+  AppLocalizations get l10n => AppLocalizations.of(this)!;
+}
 
 // ===========================================================================
 // Shared constants & pure helpers
@@ -42,6 +47,13 @@ const Duration _kSelectionMenuPopWindow = Duration(milliseconds: 1200);
 const Color _kHighlighterColor = Color(0xFFFFEB3B);
 const double _kHighlighterWidth = 20; // PDF points
 const double _kHighlighterOpacity = 0.32;
+
+const String _errUnsupportedFormat = 'unsupportedFormat';
+const String _errImageRead = 'imageRead';
+const String _errImagePrepare = 'imagePrepare';
+const String _errEmptyFile = 'emptyFile';
+const String _errTextPrepare = 'textPrepare';
+
 
 const List<Color> _kPalette = <Color>[
   Color(0xFFE53935), // red
@@ -205,7 +217,7 @@ Future<Uint8List> _convertToPdf(Uint8List bytes, {String? name}) async {
       return _textToPdf(bytes);
     case _FileKind.unsupported:
       throw const FormatException(
-        'Этот формат не поддерживается. Откройте PDF, фото или текстовый файл',
+        _errUnsupportedFormat,
       );
   }
 }
@@ -238,7 +250,7 @@ Future<_DecodedImage> _decodeImageToPng(Uint8List bytes, int maxSide) async {
       );
     } catch (_) {
       throw const FormatException(
-        'Не удалось прочитать изображение (формат не поддерживается устройством)',
+        _errImageRead,
       );
     }
 
@@ -250,7 +262,7 @@ Future<_DecodedImage> _decodeImageToPng(Uint8List bytes, int maxSide) async {
     image.dispose();
 
     if (data == null || iw <= 0 || ih <= 0) {
-      throw const FormatException('Не удалось подготовить изображение');
+      throw const FormatException(_errImagePrepare);
     }
     return _DecodedImage(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
@@ -425,7 +437,7 @@ Future<Uint8List> _rotatePngQuarterTurns(Uint8List png, int turns) async {
     final ByteData? data = await out.toByteData(format: ui.ImageByteFormat.png);
     out.dispose();
     if (data == null) {
-      throw const FormatException('Не удалось подготовить изображение');
+      throw const FormatException(_errImagePrepare);
     }
     return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   } finally {
@@ -441,7 +453,7 @@ Future<Uint8List> _textToPdf(Uint8List bytes) async {
   if (text.startsWith('\uFEFF')) text = text.substring(1);
   text = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').replaceAll('\t', '    ');
   if (text.trim().isEmpty) {
-    throw const FormatException('Файл пустой');
+    throw const FormatException(_errEmptyFile);
   }
   if (text.length > _kMaxTextChars) text = text.substring(0, _kMaxTextChars);
 
@@ -503,7 +515,7 @@ Future<Uint8List> _textToPdf(Uint8List bytes) async {
           await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
       if (data == null) {
-        throw const FormatException('Не удалось подготовить текст для PDF');
+        throw const FormatException(_errTextPrepare);
       }
 
       final PdfPage page = doc.pages.add();
@@ -784,8 +796,8 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
     final int days = today.difference(value).inDays;
     final String time =
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    if (days == 0) return 'Сегодня, $time';
-    if (days == 1) return 'Вчера, $time';
+    if (days == 0) return context.l10n.todayAt(time);
+    if (days == 1) return context.l10n.yesterdayAt(time);
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}, $time';
   }
 
@@ -794,7 +806,7 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
     if (!mounted) return;
     if (bytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Файл больше не существует')),
+        SnackBar(content: Text(context.l10n.fileNoLongerExists)),
       );
       await _load();
       return;
@@ -814,18 +826,16 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
     final bool? ok = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('Очистить недавние?'),
-        content: const Text(
-          'Локальные копии из списка недавних будут удалены. Исходные файлы не удаляются.',
-        ),
+        title: Text(context.l10n.clearRecentTitle),
+        content: Text(context.l10n.clearRecentMessage),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Очистить'),
+            child: Text(context.l10n.clear),
           ),
         ],
       ),
@@ -839,11 +849,11 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Недавние документы'),
+        title: Text(context.l10n.recentDocuments),
         actions: <Widget>[
           if (_documents.isNotEmpty)
             IconButton(
-              tooltip: 'Очистить список',
+              tooltip: context.l10n.clearList,
               icon: const Icon(Icons.delete_sweep_rounded),
               onPressed: _clearAll,
             ),
@@ -852,20 +862,20 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _documents.isEmpty
-              ? const Center(
+              ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      Icon(Icons.history_rounded, size: 72),
-                      SizedBox(height: 16),
-                      Text('Недавних документов пока нет'),
+                      const Icon(Icons.history_rounded, size: 72),
+                      const SizedBox(height: 16),
+                      Text(context.l10n.noRecentDocuments),
                     ],
                   ),
                 )
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: _documents.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (BuildContext context, int index) {
                     final _RecentDocument document = _documents[index];
                     return ListTile(
@@ -878,7 +888,7 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
                       subtitle: Text('${_date(document.lastOpened)} • ${_size(document.size)}'),
                       onTap: () => _open(document),
                       trailing: IconButton(
-                        tooltip: 'Удалить из недавних',
+                        tooltip: context.l10n.removeFromRecent,
                         icon: const Icon(Icons.close_rounded),
                         onPressed: () => _remove(document),
                       ),
@@ -896,13 +906,20 @@ class _RecentDocumentsScreenState extends State<_RecentDocumentsScreen> {
 /// Public entry point. Wraps the editor in its own theme, so the screen looks
 /// the same no matter how the host app is themed (dialogs included).
 class PdfEditorScreen extends StatelessWidget {
-  const PdfEditorScreen({super.key});
+  const PdfEditorScreen({
+    super.key,
+    required this.onLanguageChanged,
+  });
+
+  final ValueChanged<Locale> onLanguageChanged;
 
   @override
   Widget build(BuildContext context) {
     return Theme(
       data: _buildEditorTheme(Theme.of(context)),
-      child: const _PdfEditorView(),
+      child: _PdfEditorView(
+        onLanguageChanged: onLanguageChanged,
+      ),
     );
   }
 }
@@ -930,7 +947,10 @@ ThemeData _buildEditorTheme(ThemeData base) {
 }
 
 class _PdfEditorView extends StatefulWidget {
-  const _PdfEditorView();
+   const _PdfEditorView({
+    required this.onLanguageChanged,
+  });
+  final ValueChanged<Locale> onLanguageChanged;
 
   @override
   State<_PdfEditorView> createState() => _PdfEditorViewState();
@@ -1047,10 +1067,28 @@ void initState() {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String _localizedFormatException(FormatException e) {
+    final String code = e.message;
+    switch (code) {
+      case _errUnsupportedFormat:
+        return context.l10n.unsupportedFormat;
+      case _errImageRead:
+        return context.l10n.imageReadError;
+      case _errImagePrepare:
+        return context.l10n.imagePrepareError;
+      case _errEmptyFile:
+        return context.l10n.emptyFile;
+      case _errTextPrepare:
+        return context.l10n.textPrepareError;
+      default:
+        return code;
+    }
+  }
+
   Future<bool> _confirm({
     required String title,
     required String message,
-    String confirmLabel = 'Да',
+    String? confirmLabel,
     IconData icon = Icons.help_outline_rounded,
   }) async {
     final bool? result = await showDialog<bool>(
@@ -1063,11 +1101,11 @@ void initState() {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Отмена'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(confirmLabel),
+            child: Text(confirmLabel ?? context.l10n.yes),
           ),
         ],
       ),
@@ -1078,9 +1116,9 @@ void initState() {
   Future<bool> _confirmDiscardChanges() {
     if (!_dirty) return Future<bool>.value(true);
     return _confirm(
-      title: 'Несохранённые изменения',
-      message: 'Все несохранённые правки будут потеряны. Продолжить?',
-      confirmLabel: 'Продолжить',
+      title: context.l10n.unsavedChanges,
+      message: context.l10n.unsavedChangesMessage,
+      confirmLabel: context.l10n.continueLabel,
       icon: Icons.warning_amber_rounded,
     );
   }
@@ -1112,17 +1150,27 @@ void initState() {
 
   /// Runs [action] as the only async operation in flight and reports errors
   /// instead of letting them escape as unhandled exceptions.
-  Future<void> _runExclusive(Future<void> Function() action) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await action();
-    } catch (e) {
-      _showMessage('Ошибка: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
+ Future<void> _runExclusive(Future<void> Function() action) async {
+  if (_busy) return;
+
+  setState(() => _busy = true);
+
+  try {
+    await action();
+  } catch (e) {
+    if (!mounted) return;
+
+    _showMessage(
+      context.l10n.errorWithDetails(
+        e.toString(),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() => _busy = false);
     }
   }
+}
 
   /// Swaps in a freshly generated document and resets the viewer.
   void _applyNewDocument(
@@ -1185,13 +1233,22 @@ void initState() {
     if (picked == null) return;
 
     await _runExclusive(() async {
-      final Uint8List? bytes = await _readPicked(picked);
-      if (bytes == null) {
-        _showMessage('Не удалось открыть файл');
-        return;
-      }
-      await _openAnyBytes(bytes, name: picked.name);
-    });
+  final Uint8List? bytes = await _readPicked(picked);
+
+  if (!mounted) return;
+
+  if (bytes == null) {
+    _showMessage(
+      context.l10n.couldNotOpenFile,
+    );
+    return;
+  }
+
+  await _openAnyBytes(
+    bytes,
+    name: picked.name,
+  );
+});
   }
 
   /// Определяет формат, при необходимости конвертирует в PDF и открывает.
@@ -1202,6 +1259,8 @@ void initState() {
   }) async {
     if (bytes.isEmpty) return;
 
+    final l10n = context.l10n;
+
     final String fileName =
         (name == null || name.trim().isEmpty) ? 'document.pdf' : name.trim();
     final Uint8List original = Uint8List.fromList(bytes);
@@ -1210,12 +1269,16 @@ void initState() {
     try {
       pdf = await _convertToPdf(bytes, name: fileName);
     } on FormatException catch (e) {
-      _showMessage(e.message);
+      _showMessage(_localizedFormatException(e));
       return;
     } catch (e) {
-      _showMessage('Не удалось открыть файл: $e');
-      return;
-    }
+  _showMessage(
+    l10n.couldNotOpenFileDetails(
+      e.toString(),
+    ),
+  );
+  return;
+}
 
     if (!mounted) return;
     await _openPdfBytes(pdf);
@@ -1250,17 +1313,22 @@ void initState() {
     if (picked == null) return;
 
     await _runExclusive(() async {
-      final Uint8List? raw = await _readPicked(picked);
-      if (raw == null) {
-        _showMessage('Не удалось прочитать файл');
-        return;
-      }
+  final Uint8List? raw = await _readPicked(picked);
+
+  if (!mounted) return;
+
+  if (raw == null) {
+    _showMessage(
+      context.l10n.couldNotReadFile,
+    );
+    return;
+  }
 
       final Uint8List addition;
       try {
         addition = await _convertToPdf(raw, name: picked.name);
       } on FormatException catch (e) {
-        _showMessage(e.message);
+        _showMessage(_localizedFormatException(e));
         return;
       }
 
@@ -1280,7 +1348,7 @@ void initState() {
         currentPage: oldCount + 1,
         dirty: true,
       );
-      _showMessage('Добавлено страниц: ${infos.length - oldCount}');
+      _showMessage(context.l10n.pagesAdded(infos.length - oldCount));
     });
   }
 
@@ -1330,10 +1398,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   try {
     infos = _readPageInfos(bytes);
   } catch (_) {
-    _showMessage(
-      'Не удалось прочитать PDF '
-      '(файл повреждён или защищён паролем)',
-    );
+    _showMessage(context.l10n.couldNotReadPdf);
 
     return;
   }
@@ -1663,9 +1728,9 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
   Future<void> _deleteText(_TextAnnotation annotation) async {
     final bool ok = await _confirm(
-      title: 'Удалить текст?',
+      title: context.l10n.deleteTextTitle,
       message: annotation.text,
-      confirmLabel: 'Удалить',
+      confirmLabel: context.l10n.delete,
       icon: Icons.delete_outline_rounded,
     );
     if (!ok || !mounted) return;
@@ -1761,18 +1826,23 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     );
     if (picked == null) return;
 
-    await _runExclusive(() async {
-      final Uint8List? raw = await _readPicked(picked);
-      if (raw == null) {
-        _showMessage('Не удалось прочитать файл');
-        return;
-      }
+   await _runExclusive(() async {
+  final Uint8List? raw = await _readPicked(picked);
+
+  if (!mounted) return;
+
+  if (raw == null) {
+    _showMessage(
+      context.l10n.couldNotReadFile,
+    );
+    return;
+  }
 
       final _DecodedImage decoded;
       try {
         decoded = await _decodeImageToPng(raw, _kStampMaxPixels);
       } on FormatException catch (e) {
-        _showMessage(e.message);
+        _showMessage(_localizedFormatException(e));
         return;
       }
       if (!mounted) return;
@@ -1805,9 +1875,9 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
   Future<void> _deleteImage(_ImageAnnotation image) async {
     final bool ok = await _confirm(
-      title: 'Удалить фото?',
-      message: 'Фото будет удалено со страницы.',
-      confirmLabel: 'Удалить',
+      title: context.l10n.deletePhotoTitle,
+      message: context.l10n.deletePhotoMessage,
+      confirmLabel: context.l10n.delete,
       icon: Icons.delete_outline_rounded,
     );
     if (!ok || !mounted) return;
@@ -1861,15 +1931,15 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   Future<void> deletePage() async {
     if (_busy || pdfBytes == null) return;
     if (_pageInfos.length <= 1) {
-      _showMessage('Нельзя удалить единственную страницу');
+      _showMessage(context.l10n.cannotDeleteOnlyPage);
       return;
     }
 
     final int removeIndex = _currentPage - 1;
     final bool ok = await _confirm(
-      title: 'Удалить страницу $_currentPage?',
-      message: 'Страница и все правки на ней будут удалены.',
-      confirmLabel: 'Удалить',
+      title: context.l10n.deletePageTitle(_currentPage),
+      message: context.l10n.deletePageMessage,
+      confirmLabel: context.l10n.delete,
       icon: Icons.delete_outline_rounded,
     );
     if (!ok) return;
@@ -2003,7 +2073,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   }) async {
     await SharePlus.instance.share(
       ShareParams(
-        title: 'Поделиться $fileName',
+        title: context.l10n.shareFileTitle(fileName),
         files: <XFile>[
           XFile.fromData(bytes, mimeType: mimeType),
         ],
@@ -2017,7 +2087,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     required String fileName,
   }) async {
     final Uri? savedUri = await FilePicker.saveFile(
-      dialogTitle: 'Сохранить PDF',
+      dialogTitle: context.l10n.savePdf,
       fileName: fileName,
       bytes: bytes,
       mimeType: 'application/pdf',
@@ -2084,23 +2154,21 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         icon: const Icon(Icons.share_rounded),
-        title: const Text('Поделиться файлом'),
-        content: const Text(
-          'Есть несохранённые изменения. Что отправить?',
-        ),
+        title: Text(context.l10n.shareFile),
+        content: Text(context.l10n.unsavedShareQuestion),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
+            child: Text(context.l10n.cancel),
           ),
           if (original != null)
             TextButton(
               onPressed: () => Navigator.pop(context, 'original'),
-              child: const Text('Без изменений'),
+              child: Text(context.l10n.withoutChanges),
             ),
           FilledButton(
             onPressed: () => Navigator.pop(context, 'edited'),
-            child: const Text('Сохранить и отправить'),
+            child: Text(context.l10n.saveAndShare),
           ),
         ],
       ),
@@ -2168,15 +2236,19 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     painter.dispose();
 
     final ui.Picture picture = recorder.endRecording();
+    final l10n = context.l10n;
     final ui.Image image = await picture.toImage(widthPx, heightPx);
+    
     picture.dispose();
     final ByteData? data =
         await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
 
     if (data == null) {
-      throw StateError('Не удалось подготовить текст для PDF');
-    }
+  throw StateError(
+    l10n.textPrepareError,
+  );
+}
 
     return _RenderedTextImage(
       bytes: data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
@@ -2294,7 +2366,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
       if (!saved || !mounted) return;
 
       await _acceptSavedVersion(finalBytes, fileName: fileName);
-      if (mounted) _showMessage('PDF сохранён успешно');
+      if (mounted) _showMessage(context.l10n.pdfSavedSuccessfully);
     });
   }
 
@@ -2488,7 +2560,8 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         }
 
         final bool leave = await _confirmDiscardChanges();
-        if (leave && mounted) Navigator.of(context).pop();
+        if (!context.mounted) return;
+        if (leave) Navigator.of(context).pop();
       },
       child: Scaffold(
         appBar: _buildAppBar(cs, canAct),
@@ -2563,7 +2636,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Tooltip(
-                message: 'Есть несохранённые изменения',
+                message: context.l10n.hasUnsavedChanges,
                 child: Container(
                   width: 9,
                   height: 9,
@@ -2577,30 +2650,56 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         ],
       ),
       actions: <Widget>[
+         PopupMenuButton<String>(
+    tooltip: 'Language',
+    icon: const Icon(Icons.language_rounded),
+    onSelected: (String value) {
+      widget.onLanguageChanged(Locale(value));
+    },
+    itemBuilder: (BuildContext context) => const [
+      PopupMenuItem<String>(
+        value: 'en',
+        child: Text('English'),
+      ),
+      PopupMenuItem<String>(
+        value: 'ru',
+        child: Text('Русский'),
+      ),
+      PopupMenuItem<String>(
+        value: 'sk',
+        child: Text('Slovenčina'),
+      ),
+      PopupMenuItem<String>(
+        value: 'uk',
+        child: Text('Українська'),
+      ),
+    ],
+  ),
+
         IconButton(
-          tooltip: 'Недавние документы',
+          tooltip: context.l10n.recentDocuments,
           icon: const Icon(Icons.history_rounded),
           onPressed: _busy ? null : _openRecentDocuments,
         ),
         IconButton(
-          tooltip: 'Поделиться',
+          tooltip: context.l10n.share,
           icon: const Icon(Icons.share_rounded),
           onPressed: pdfBytes == null || _busy ? null : _shareFile,
         ),
         IconButton(
-          tooltip: 'Открыть файл (PDF, фото, текст)',
+          tooltip: context.l10n.openFileTypes,
           icon: const Icon(Icons.folder_open_rounded),
           onPressed: _busy ? null : openFile,
         ),
         if (pdfBytes != null)
           IconButton(
-            tooltip: 'Добавить страницы из файла',
+            tooltip: context.l10n.addPagesFromFile,
             icon: const Icon(Icons.note_add_rounded),
             onPressed: canAct ? addPagesFromFile : null,
           ),
         if (pdfBytes != null)
           IconButton.filled(
-            tooltip: 'Сохранить PDF',
+            tooltip: context.l10n.savePdf,
             icon: const Icon(Icons.save_alt_rounded),
             onPressed: canAct ? savePdf : null,
           ),
@@ -2642,7 +2741,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
               ),
               const SizedBox(height: 32),
               Text(
-                'Редактируй PDF\nза пару касаний',
+                context.l10n.homeTitle,
                 textAlign: TextAlign.center,
                 style: tt.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w800,
@@ -2651,7 +2750,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
               ),
               const SizedBox(height: 12),
               Text(
-                'Открывай PDF, фото и текстовые файлы. Рисуй, добавляй текст, поворачивай, переставляй и удаляй страницы.',
+                context.l10n.homeDescription,
                 textAlign: TextAlign.center,
                 style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               ),
@@ -2659,7 +2758,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
               FilledButton.icon(
                 onPressed: _busy ? null : openFile,
                 icon: const Icon(Icons.folder_open_rounded),
-                label: const Text('Открыть файл'),
+                label: Text(context.l10n.openFile),
                 style: FilledButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
@@ -2670,23 +2769,23 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                 ),
               ),
               const SizedBox(height: 32),
-              const Wrap(
+              Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
                 children: <Widget>[
                   _FeatureChip(
-                      icon: Icons.photo_library_rounded, label: 'Фото'),
+                      icon: Icons.photo_library_rounded, label: context.l10n.photo),
                   _FeatureChip(
-                      icon: Icons.article_rounded, label: 'TXT и другие'),
-                  _FeatureChip(icon: Icons.draw_rounded, label: 'Рисование'),
+                      icon: Icons.article_rounded, label: context.l10n.txtAndOthers),
+                  _FeatureChip(icon: Icons.draw_rounded, label: context.l10n.drawing),
                   _FeatureChip(
-                      icon: Icons.text_fields_rounded, label: 'Текст'),
-                  _FeatureChip(icon: Icons.zoom_in_rounded, label: 'Зум'),
+                      icon: Icons.text_fields_rounded, label: context.l10n.textTool),
+                  _FeatureChip(icon: Icons.zoom_in_rounded, label: context.l10n.zoom),
                   _FeatureChip(
-                      icon: Icons.rotate_right_rounded, label: 'Поворот'),
+                      icon: Icons.rotate_right_rounded, label: context.l10n.rotation),
                   _FeatureChip(
-                      icon: Icons.swap_vert_rounded, label: 'Порядок страниц'),
+                      icon: Icons.swap_vert_rounded, label: context.l10n.pageOrder),
                 ],
               ),
             ],
@@ -2776,7 +2875,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                 },
                 onDocumentLoadFailed: (PdfDocumentLoadFailedDetails details) {
                   if (!mounted) return;
-                  _showMessage('Не удалось отобразить PDF: ${details.description}');
+                  _showMessage(context.l10n.couldNotDisplayPdf(details.description));
                   setState(() {
                     pdfBytes = null;
                     _pageInfos = <_PageInfo>[];
@@ -2970,7 +3069,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         children: <Widget>[
           _PillButton(
             icon: Icons.chevron_left_rounded,
-            tooltip: 'Предыдущая страница',
+            tooltip: context.l10n.previousPage,
             onPressed:
                 canAct && _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
           ),
@@ -2986,7 +3085,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
           ),
           _PillButton(
             icon: Icons.chevron_right_rounded,
-            tooltip: 'Следующая страница',
+            tooltip: context.l10n.nextPage,
             onPressed: canAct && _currentPage < _pageInfos.length
                 ? () => _goToPage(_currentPage + 1)
                 : null,
@@ -3009,7 +3108,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           IconButton(
-            tooltip: 'Приблизить',
+            tooltip: context.l10n.zoomIn,
             icon: const Icon(Icons.add_rounded),
             onPressed: canIn ? () => _zoomBy(1.5) : null,
           ),
@@ -3030,7 +3129,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
             ),
           ),
           IconButton(
-            tooltip: 'Отдалить',
+            tooltip: context.l10n.zoomOut,
             icon: const Icon(Icons.remove_rounded),
             onPressed: canOut ? () => _zoomBy(1 / 1.5) : null,
           ),
@@ -3241,7 +3340,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     final _ImageAnnotation? sel = _selected;
 
     final Widget addButton = IconButton(
-      tooltip: 'Добавить фото',
+      tooltip: context.l10n.addPhoto,
       icon: const Icon(Icons.add_photo_alternate_rounded),
       onPressed: _busy ? null : _insertImage,
     );
@@ -3252,7 +3351,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
           child: Padding(
             padding: const EdgeInsets.only(left: 8),
             child: Text(
-              'Тап по фото — выбрать,\nтяните — переместить',
+              context.l10n.photoHint,
               maxLines: 2,
               style: TextStyle(
                 inherit: false,
@@ -3284,7 +3383,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         ),
       ),
       IconButton(
-        tooltip: 'Удалить фото',
+        tooltip: context.l10n.deletePhoto,
         icon: Icon(Icons.delete_outline_rounded, color: cs.error),
         onPressed: () => _deleteImage(sel),
       ),
@@ -3339,7 +3438,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Полупрозрачный жёлтый маркер',
+                        context.l10n.highlighterHint,
                         style: TextStyle(
                           inherit: false,
                           fontSize: 11,
@@ -3355,7 +3454,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
             else
               Expanded(
                 child: Text(
-                  'Тап — править,\nудержание — удалить',
+                  context.l10n.textEditHint,
                   maxLines: 2,
                   style: TextStyle(
                     inherit: false,
@@ -3416,7 +3515,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                       children: <Widget>[
                         _ToolButton(
                           icon: Icons.draw_rounded,
-                          label: 'Рисовать',
+                          label: context.l10n.draw,
                           selected: _tool == _EditorTool.draw,
                           onPressed: canAct
                               ? () => _selectTool(_EditorTool.draw)
@@ -3424,7 +3523,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                         ),
                         _ToolButton(
                           icon: Icons.highlight_rounded,
-                          label: 'Маркер',
+                          label: context.l10n.highlighter,
                           selected: _tool == _EditorTool.highlight,
                           onPressed: canAct
                               ? () => _selectTool(_EditorTool.highlight)
@@ -3432,65 +3531,64 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                         ),
                         _ToolButton(
                           icon: Icons.text_fields_rounded,
-                          label: 'Текст',
+                          label: context.l10n.textTool,
                           selected: _tool == _EditorTool.text,
                           onPressed: canAct
                               ? () {
                                   _selectTool(_EditorTool.text);
                                   if (_tool == _EditorTool.text) {
-                                    _showMessage(
-                                        'Нажми на место на странице для текста');
+                                    _showMessage(context.l10n.tapPageForText);
                                   }
                                 }
                               : null,
                         ),
                         _ToolButton(
                           icon: Icons.add_photo_alternate_rounded,
-                          label: 'Фото',
+                          label: context.l10n.photo,
                           selected: _tool == _EditorTool.image,
                           onPressed: canAct ? _onImageToolPressed : null,
                         ),
                         divider(),
                         _ToolButton(
                           icon: Icons.undo_rounded,
-                          label: 'Отмена',
+                          label: context.l10n.undo,
                           onPressed: canAct && _canUndo ? undoCustomEdit : null,
                         ),
                         _ToolButton(
                           icon: Icons.redo_rounded,
-                          label: 'Вернуть',
+                          label: context.l10n.redo,
                           onPressed: canAct && _canRedo ? redoCustomEdit : null,
                         ),
                         divider(),
                         _ToolButton(
                           icon: Icons.rotate_left_rounded,
-                          label: 'Влево',
+                          label: context.l10n.left,
                           onPressed:
                               canAct ? () => rotatePage(clockwise: false) : null,
                         ),
                         _ToolButton(
                           icon: Icons.rotate_right_rounded,
-                          label: 'Вправо',
+                          label: context.l10n.right,
                           onPressed: canAct ? () => rotatePage() : null,
                         ),
                         divider(),
                         _ToolButton(
                           icon: Icons.arrow_upward_rounded,
-                          label: 'Вверх',
+                          label: context.l10n.up,
                           onPressed: canAct && _currentPage > 1
                               ? () => movePage(_currentPage - 2)
                               : null,
                         ),
                         _ToolButton(
                           icon: Icons.arrow_downward_rounded,
-                          label: 'Вниз',
+                          label: context.l10n.down,
                           onPressed: canAct && _currentPage < _pageInfos.length
                               ? () => movePage(_currentPage)
                               : null,
                         ),
                         _ToolButton(
                           icon: Icons.delete_outline_rounded,
-                          label: 'Удалить',
+                          label: context.l10n.delete,
                           danger: true,
                           onPressed: canAct ? deletePage : null,
                         ),
@@ -3783,7 +3881,7 @@ class _AddTextDialogState extends State<_AddTextDialog> {
         widget.isEditing ? Icons.edit_rounded : Icons.text_fields_rounded,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      title: Text(widget.isEditing ? 'Изменить текст' : 'Добавить текст'),
+      title: Text(widget.isEditing ? context.l10n.editText : context.l10n.addText),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3798,7 +3896,7 @@ class _AddTextDialogState extends State<_AddTextDialog> {
               minLines: 1,
               maxLines: 5,
               decoration: InputDecoration(
-                hintText: 'Введите текст',
+                hintText: context.l10n.enterText,
                 filled: true,
                 fillColor: cs.surfaceContainerHighest,
                 contentPadding:
@@ -3819,7 +3917,7 @@ class _AddTextDialogState extends State<_AddTextDialog> {
                 Icon(Icons.format_size_rounded,
                     size: 20, color: cs.onSurfaceVariant),
                 const SizedBox(width: 8),
-                const Text('Размер'),
+                Text(context.l10n.size),
                 const Spacer(),
                 Container(
                   padding:
@@ -3856,7 +3954,7 @@ class _AddTextDialogState extends State<_AddTextDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           onPressed: () {
@@ -3866,7 +3964,7 @@ class _AddTextDialogState extends State<_AddTextDialog> {
               _TextDialogResult(text: value, fontSize: _fontSize),
             );
           },
-          child: Text(widget.isEditing ? 'Сохранить' : 'Добавить'),
+          child: Text(widget.isEditing ? context.l10n.save : context.l10n.add),
         ),
       ],
     );
@@ -3953,16 +4051,16 @@ abstract class _PlacedAnnotation extends _PageAnnotation {
   Size get contentSizePt;
 }
 
-class _TextAnnotation extends _PlacedAnnotation {
+class _TextAnnotation
+    extends _PlacedAnnotation {
   _TextAnnotation({
-    required int pageIndex,
+    required super.pageIndex,
     required this.text,
     required this.fontSize,
     required this.color,
-    required Offset center,
-    required int turns,
-  }) : super(pageIndex: pageIndex, center: center, turns: turns);
-
+    required super.center,
+    required super.turns,
+  });
   String text;
   double fontSize;
   final Color color;
@@ -3971,17 +4069,17 @@ class _TextAnnotation extends _PlacedAnnotation {
   Size get contentSizePt => _measureTextSize(text, fontSize);
 }
 
-class _ImageAnnotation extends _PlacedAnnotation {
+class _ImageAnnotation
+    extends _PlacedAnnotation {
   _ImageAnnotation({
-    required int pageIndex,
+    required super.pageIndex,
     required this.png,
     required this.pixelWidth,
     required this.pixelHeight,
     required this.widthPt,
-    required Offset center,
-    required int turns,
-  }) : super(pageIndex: pageIndex, center: center, turns: turns);
-
+    required super.center,
+    required super.turns,
+  });
   final Uint8List png;
   final int pixelWidth;
   final int pixelHeight;

@@ -1,0 +1,138 @@
+{
+  "@@locale": "sk",
+  "add": "Pridať",
+  "addPagesFromFile": "Pridať strany zo súboru",
+  "addPhoto": "Pridať fotografiu",
+  "addText": "Pridať text",
+  "cancel": "Zrušiť",
+  "cannotDeleteOnlyPage": "Jedinú stranu nemožno odstrániť",
+  "clear": "Vymazať",
+  "clearList": "Vymazať zoznam",
+  "clearRecentMessage": "Lokálne kópie zo zoznamu nedávnych dokumentov sa odstránia. Pôvodné súbory sa neodstránia.",
+  "clearRecentTitle": "Vymazať nedávne dokumenty?",
+  "continueLabel": "Pokračovať",
+  "couldNotDisplayPdf": "PDF sa nepodarilo zobraziť: {details}",
+  "@couldNotDisplayPdf": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotOpenFile": "Súbor sa nepodarilo otvoriť",
+  "couldNotOpenFileDetails": "Súbor sa nepodarilo otvoriť: {details}",
+  "@couldNotOpenFileDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotReadFile": "Súbor sa nepodarilo načítať",
+  "couldNotReadPdf": "PDF sa nepodarilo načítať (súbor môže byť poškodený alebo chránený heslom)",
+  "delete": "Odstrániť",
+  "deletePageMessage": "Strana a všetky úpravy na nej sa odstránia.",
+  "deletePageTitle": "Odstrániť stranu {page}?",
+  "@deletePageTitle": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "deletePhoto": "Odstrániť fotografiu",
+  "deletePhotoMessage": "Fotografia sa odstráni zo strany.",
+  "deletePhotoTitle": "Odstrániť fotografiu?",
+  "deleteTextTitle": "Odstrániť text?",
+  "down": "Nadol",
+  "draw": "Kresliť",
+  "drawing": "Kreslenie",
+  "editText": "Upraviť text",
+  "emptyFile": "Súbor je prázdny",
+  "enterText": "Zadajte text",
+  "errorWithDetails": "Chyba: {details}",
+  "@errorWithDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "fileNoLongerExists": "Súbor už neexistuje",
+  "hasUnsavedChanges": "Existujú neuložené zmeny",
+  "highlighter": "Zvýrazňovač",
+  "highlighterHint": "Priesvitný žltý zvýrazňovač",
+  "homeDescription": "Otvárajte PDF, fotografie a textové súbory. Kreslite, pridávajte text, otáčajte, presúvajte a odstraňujte strany.",
+  "homeTitle": "Upravujte PDF\nna pár ťuknutí",
+  "imagePrepareError": "Obrázok sa nepodarilo pripraviť",
+  "imageReadError": "Obrázok sa nepodarilo načítať (formát zariadenie nepodporuje)",
+  "left": "Doľava",
+  "nextPage": "Nasledujúca strana",
+  "noRecentDocuments": "Zatiaľ žiadne nedávne dokumenty",
+  "openFile": "Otvoriť súbor",
+  "openFileTypes": "Otvoriť súbor (PDF, fotografia, text)",
+  "pageOrder": "Poradie strán",
+  "pagesAdded": "Pridané strany: {count}",
+  "@pagesAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdfSavedSuccessfully": "PDF bolo úspešne uložené",
+  "photo": "Fotografia",
+  "photoHint": "Ťuknutím vyberte fotografiu,\npotiahnutím ju presuňte",
+  "previousPage": "Predchádzajúca strana",
+  "recentDocuments": "Nedávne dokumenty",
+  "redo": "Znova",
+  "removeFromRecent": "Odstrániť z nedávnych",
+  "right": "Doprava",
+  "rotation": "Otočenie",
+  "save": "Uložiť",
+  "saveAndShare": "Uložiť a zdieľať",
+  "savePdf": "Uložiť PDF",
+  "share": "Zdieľať",
+  "shareFile": "Zdieľať súbor",
+  "shareFileTitle": "Zdieľať {fileName}",
+  "@shareFileTitle": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "size": "Veľkosť",
+  "tapPageForText": "Ťuknite na miesto na strane, kam chcete pridať text",
+  "textEditHint": "Ťuknite na úpravu,\npodržte na odstránenie",
+  "textPrepareError": "Text pre PDF sa nepodarilo pripraviť",
+  "textTool": "Text",
+  "todayAt": "Dnes, {time}",
+  "@todayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "txtAndOthers": "TXT a ďalšie",
+  "undo": "Späť",
+  "unsavedChanges": "Neuložené zmeny",
+  "unsavedChangesMessage": "Všetky neuložené úpravy sa stratia. Pokračovať?",
+  "unsavedShareQuestion": "Existujú neuložené zmeny. Čo chcete zdieľať?",
+  "unsupportedFormat": "Tento formát nie je podporovaný. Otvorte PDF, fotografiu alebo textový súbor",
+  "up": "Nahor",
+  "withoutChanges": "Bez zmien",
+  "yes": "Áno",
+  "yesterdayAt": "Včera, {time}",
+  "@yesterdayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "zoom": "Priblíženie",
+  "zoomIn": "Priblížiť",
+  "zoomOut": "Oddialiť"
+}

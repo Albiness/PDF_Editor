@@ -1,0 +1,138 @@
+{
+  "@@locale": "en",
+  "add": "Add",
+  "addPagesFromFile": "Add pages from file",
+  "addPhoto": "Add photo",
+  "addText": "Add text",
+  "cancel": "Cancel",
+  "cannotDeleteOnlyPage": "The only page cannot be deleted",
+  "clear": "Clear",
+  "clearList": "Clear list",
+  "clearRecentMessage": "Local copies in the recent list will be deleted. Original files will not be deleted.",
+  "clearRecentTitle": "Clear recent documents?",
+  "continueLabel": "Continue",
+  "couldNotDisplayPdf": "Could not display PDF: {details}",
+  "@couldNotDisplayPdf": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotOpenFile": "Could not open file",
+  "couldNotOpenFileDetails": "Could not open file: {details}",
+  "@couldNotOpenFileDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotReadFile": "Could not read file",
+  "couldNotReadPdf": "Could not read PDF (the file may be damaged or password-protected)",
+  "delete": "Delete",
+  "deletePageMessage": "The page and all edits on it will be deleted.",
+  "deletePageTitle": "Delete page {page}?",
+  "@deletePageTitle": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "deletePhoto": "Delete photo",
+  "deletePhotoMessage": "The photo will be removed from the page.",
+  "deletePhotoTitle": "Delete photo?",
+  "deleteTextTitle": "Delete text?",
+  "down": "Down",
+  "draw": "Draw",
+  "drawing": "Drawing",
+  "editText": "Edit text",
+  "emptyFile": "The file is empty",
+  "enterText": "Enter text",
+  "errorWithDetails": "Error: {details}",
+  "@errorWithDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "fileNoLongerExists": "The file no longer exists",
+  "hasUnsavedChanges": "There are unsaved changes",
+  "highlighter": "Highlighter",
+  "highlighterHint": "Translucent yellow highlighter",
+  "homeDescription": "Open PDF, photo, and text files. Draw, add text, rotate, reorder, and delete pages.",
+  "homeTitle": "Edit PDFs\nin just a few taps",
+  "imagePrepareError": "Could not prepare the image",
+  "imageReadError": "Could not read the image (the format is not supported by this device)",
+  "left": "Left",
+  "nextPage": "Next page",
+  "noRecentDocuments": "No recent documents yet",
+  "openFile": "Open file",
+  "openFileTypes": "Open file (PDF, photo, text)",
+  "pageOrder": "Page order",
+  "pagesAdded": "Pages added: {count}",
+  "@pagesAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdfSavedSuccessfully": "PDF saved successfully",
+  "photo": "Photo",
+  "photoHint": "Tap a photo to select it,\ndrag to move it",
+  "previousPage": "Previous page",
+  "recentDocuments": "Recent documents",
+  "redo": "Redo",
+  "removeFromRecent": "Remove from recent",
+  "right": "Right",
+  "rotation": "Rotation",
+  "save": "Save",
+  "saveAndShare": "Save and share",
+  "savePdf": "Save PDF",
+  "share": "Share",
+  "shareFile": "Share file",
+  "shareFileTitle": "Share {fileName}",
+  "@shareFileTitle": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "size": "Size",
+  "tapPageForText": "Tap a place on the page to add text",
+  "textEditHint": "Tap to edit,\npress and hold to delete",
+  "textPrepareError": "Could not prepare text for PDF",
+  "textTool": "Text",
+  "todayAt": "Today, {time}",
+  "@todayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "txtAndOthers": "TXT and others",
+  "undo": "Undo",
+  "unsavedChanges": "Unsaved changes",
+  "unsavedChangesMessage": "All unsaved edits will be lost. Continue?",
+  "unsavedShareQuestion": "There are unsaved changes. What would you like to share?",
+  "unsupportedFormat": "This format is not supported. Open a PDF, photo, or text file",
+  "up": "Up",
+  "withoutChanges": "Without changes",
+  "yes": "Yes",
+  "yesterdayAt": "Yesterday, {time}",
+  "@yesterdayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "zoom": "Zoom",
+  "zoomIn": "Zoom in",
+  "zoomOut": "Zoom out"
+}

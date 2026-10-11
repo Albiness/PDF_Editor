@@ -1,0 +1,138 @@
+{
+  "@@locale": "ru",
+  "add": "Добавить",
+  "addPagesFromFile": "Добавить страницы из файла",
+  "addPhoto": "Добавить фото",
+  "addText": "Добавить текст",
+  "cancel": "Отмена",
+  "cannotDeleteOnlyPage": "Нельзя удалить единственную страницу",
+  "clear": "Очистить",
+  "clearList": "Очистить список",
+  "clearRecentMessage": "Локальные копии из списка недавних будут удалены. Исходные файлы не удаляются.",
+  "clearRecentTitle": "Очистить недавние?",
+  "continueLabel": "Продолжить",
+  "couldNotDisplayPdf": "Не удалось отобразить PDF: {details}",
+  "@couldNotDisplayPdf": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotOpenFile": "Не удалось открыть файл",
+  "couldNotOpenFileDetails": "Не удалось открыть файл: {details}",
+  "@couldNotOpenFileDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotReadFile": "Не удалось прочитать файл",
+  "couldNotReadPdf": "Не удалось прочитать PDF (файл повреждён или защищён паролем)",
+  "delete": "Удалить",
+  "deletePageMessage": "Страница и все правки на ней будут удалены.",
+  "deletePageTitle": "Удалить страницу {page}?",
+  "@deletePageTitle": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "deletePhoto": "Удалить фото",
+  "deletePhotoMessage": "Фото будет удалено со страницы.",
+  "deletePhotoTitle": "Удалить фото?",
+  "deleteTextTitle": "Удалить текст?",
+  "down": "Вниз",
+  "draw": "Рисовать",
+  "drawing": "Рисование",
+  "editText": "Изменить текст",
+  "emptyFile": "Файл пустой",
+  "enterText": "Введите текст",
+  "errorWithDetails": "Ошибка: {details}",
+  "@errorWithDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "fileNoLongerExists": "Файл больше не существует",
+  "hasUnsavedChanges": "Есть несохранённые изменения",
+  "highlighter": "Маркер",
+  "highlighterHint": "Полупрозрачный жёлтый маркер",
+  "homeDescription": "Открывай PDF, фото и текстовые файлы. Рисуй, добавляй текст, поворачивай, переставляй и удаляй страницы.",
+  "homeTitle": "Редактируй PDF\nза пару касаний",
+  "imagePrepareError": "Не удалось подготовить изображение",
+  "imageReadError": "Не удалось прочитать изображение (формат не поддерживается устройством)",
+  "left": "Влево",
+  "nextPage": "Следующая страница",
+  "noRecentDocuments": "Недавних документов пока нет",
+  "openFile": "Открыть файл",
+  "openFileTypes": "Открыть файл (PDF, фото, текст)",
+  "pageOrder": "Порядок страниц",
+  "pagesAdded": "Добавлено страниц: {count}",
+  "@pagesAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdfSavedSuccessfully": "PDF сохранён успешно",
+  "photo": "Фото",
+  "photoHint": "Тап по фото — выбрать,\nтяните — переместить",
+  "previousPage": "Предыдущая страница",
+  "recentDocuments": "Недавние документы",
+  "redo": "Вернуть",
+  "removeFromRecent": "Удалить из недавних",
+  "right": "Вправо",
+  "rotation": "Поворот",
+  "save": "Сохранить",
+  "saveAndShare": "Сохранить и отправить",
+  "savePdf": "Сохранить PDF",
+  "share": "Поделиться",
+  "shareFile": "Поделиться файлом",
+  "shareFileTitle": "Поделиться {fileName}",
+  "@shareFileTitle": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "size": "Размер",
+  "tapPageForText": "Нажми на место на странице для текста",
+  "textEditHint": "Тап — править,\nудержание — удалить",
+  "textPrepareError": "Не удалось подготовить текст для PDF",
+  "textTool": "Текст",
+  "todayAt": "Сегодня, {time}",
+  "@todayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "txtAndOthers": "TXT и другие",
+  "undo": "Отмена",
+  "unsavedChanges": "Несохранённые изменения",
+  "unsavedChangesMessage": "Все несохранённые правки будут потеряны. Продолжить?",
+  "unsavedShareQuestion": "Есть несохранённые изменения. Что отправить?",
+  "unsupportedFormat": "Этот формат не поддерживается. Откройте PDF, фото или текстовый файл",
+  "up": "Вверх",
+  "withoutChanges": "Без изменений",
+  "yes": "Да",
+  "yesterdayAt": "Вчера, {time}",
+  "@yesterdayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "zoom": "Зум",
+  "zoomIn": "Приблизить",
+  "zoomOut": "Отдалить"
+}

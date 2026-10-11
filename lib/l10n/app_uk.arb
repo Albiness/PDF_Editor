@@ -1,0 +1,138 @@
+{
+  "@@locale": "uk",
+  "add": "Додати",
+  "addPagesFromFile": "Додати сторінки з файлу",
+  "addPhoto": "Додати фото",
+  "addText": "Додати текст",
+  "cancel": "Скасувати",
+  "cannotDeleteOnlyPage": "Не можна видалити єдину сторінку",
+  "clear": "Очистити",
+  "clearList": "Очистити список",
+  "clearRecentMessage": "Локальні копії зі списку нещодавніх буде видалено. Початкові файли не видаляються.",
+  "clearRecentTitle": "Очистити нещодавні?",
+  "continueLabel": "Продовжити",
+  "couldNotDisplayPdf": "Не вдалося відобразити PDF: {details}",
+  "@couldNotDisplayPdf": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotOpenFile": "Не вдалося відкрити файл",
+  "couldNotOpenFileDetails": "Не вдалося відкрити файл: {details}",
+  "@couldNotOpenFileDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotReadFile": "Не вдалося прочитати файл",
+  "couldNotReadPdf": "Не вдалося прочитати PDF (файл пошкоджено або захищено паролем)",
+  "delete": "Видалити",
+  "deletePageMessage": "Сторінку та всі зміни на ній буде видалено.",
+  "deletePageTitle": "Видалити сторінку {page}?",
+  "@deletePageTitle": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "deletePhoto": "Видалити фото",
+  "deletePhotoMessage": "Фото буде видалено зі сторінки.",
+  "deletePhotoTitle": "Видалити фото?",
+  "deleteTextTitle": "Видалити текст?",
+  "down": "Вниз",
+  "draw": "Малювати",
+  "drawing": "Малювання",
+  "editText": "Змінити текст",
+  "emptyFile": "Файл порожній",
+  "enterText": "Введіть текст",
+  "errorWithDetails": "Помилка: {details}",
+  "@errorWithDetails": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "fileNoLongerExists": "Файл більше не існує",
+  "hasUnsavedChanges": "Є незбережені зміни",
+  "highlighter": "Маркер",
+  "highlighterHint": "Напівпрозорий жовтий маркер",
+  "homeDescription": "Відкривайте PDF, фото та текстові файли. Малюйте, додавайте текст, повертайте, переставляйте та видаляйте сторінки.",
+  "homeTitle": "Редагуйте PDF\nза кілька дотиків",
+  "imagePrepareError": "Не вдалося підготувати зображення",
+  "imageReadError": "Не вдалося прочитати зображення (формат не підтримується пристроєм)",
+  "left": "Ліворуч",
+  "nextPage": "Наступна сторінка",
+  "noRecentDocuments": "Нещодавніх документів поки немає",
+  "openFile": "Відкрити файл",
+  "openFileTypes": "Відкрити файл (PDF, фото, текст)",
+  "pageOrder": "Порядок сторінок",
+  "pagesAdded": "Додано сторінок: {count}",
+  "@pagesAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdfSavedSuccessfully": "PDF успішно збережено",
+  "photo": "Фото",
+  "photoHint": "Торкніться фото, щоб вибрати,\nперетягуйте, щоб перемістити",
+  "previousPage": "Попередня сторінка",
+  "recentDocuments": "Нещодавні документи",
+  "redo": "Повторити",
+  "removeFromRecent": "Видалити з нещодавніх",
+  "right": "Праворуч",
+  "rotation": "Поворот",
+  "save": "Зберегти",
+  "saveAndShare": "Зберегти й поділитися",
+  "savePdf": "Зберегти PDF",
+  "share": "Поділитися",
+  "shareFile": "Поділитися файлом",
+  "shareFileTitle": "Поділитися {fileName}",
+  "@shareFileTitle": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "size": "Розмір",
+  "tapPageForText": "Торкніться місця на сторінці, щоб додати текст",
+  "textEditHint": "Торкніться, щоб редагувати,\nутримуйте, щоб видалити",
+  "textPrepareError": "Не вдалося підготувати текст для PDF",
+  "textTool": "Текст",
+  "todayAt": "Сьогодні, {time}",
+  "@todayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "txtAndOthers": "TXT та інші",
+  "undo": "Скасувати",
+  "unsavedChanges": "Незбережені зміни",
+  "unsavedChangesMessage": "Усі незбережені зміни буде втрачено. Продовжити?",
+  "unsavedShareQuestion": "Є незбережені зміни. Що надіслати?",
+  "unsupportedFormat": "Цей формат не підтримується. Відкрийте PDF, фото або текстовий файл",
+  "up": "Вгору",
+  "withoutChanges": "Без змін",
+  "yes": "Так",
+  "yesterdayAt": "Учора, {time}",
+  "@yesterdayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "zoom": "Масштаб",
+  "zoomIn": "Наблизити",
+  "zoomOut": "Віддалити"
+}
