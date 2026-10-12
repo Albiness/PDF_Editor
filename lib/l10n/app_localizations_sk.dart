@@ -33,7 +33,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get clearList => 'Vymazať zoznam';
 
   @override
-  String get clearRecentMessage => 'Lokálne kópie zo zoznamu nedávnych dokumentov sa odstránia. Pôvodné súbory sa neodstránia.';
+  String get clearRecentMessage =>
+      'Lokálne kópie zo zoznamu nedávnych dokumentov sa odstránia. Pôvodné súbory sa neodstránia.';
 
   @override
   String get clearRecentTitle => 'Vymazať nedávne dokumenty?';
@@ -58,7 +59,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get couldNotReadFile => 'Súbor sa nepodarilo načítať';
 
   @override
-  String get couldNotReadPdf => 'PDF sa nepodarilo načítať (súbor môže byť poškodený alebo chránený heslom)';
+  String get couldNotReadPdf =>
+      'PDF sa nepodarilo načítať (súbor môže byť poškodený alebo chránený heslom)';
 
   @override
   String get delete => 'Odstrániť';
@@ -119,7 +121,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get highlighterHint => 'Priesvitný žltý zvýrazňovač';
 
   @override
-  String get homeDescription => 'Otvárajte PDF, fotografie a textové súbory. Kreslite, pridávajte text, otáčajte, presúvajte a odstraňujte strany.';
+  String get homeDescription =>
+      'Otvárajte PDF, fotografie a textové súbory. Kreslite, pridávajte text, otáčajte, presúvajte a odstraňujte strany.';
 
   @override
   String get homeTitle => 'Upravujte PDF\nna pár ťuknutí';
@@ -128,7 +131,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get imagePrepareError => 'Obrázok sa nepodarilo pripraviť';
 
   @override
-  String get imageReadError => 'Obrázok sa nepodarilo načítať (formát zariadenie nepodporuje)';
+  String get imageReadError =>
+      'Obrázok sa nepodarilo načítať (formát zariadenie nepodporuje)';
 
   @override
   String get left => 'Doľava';
@@ -160,7 +164,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get photo => 'Fotografia';
 
   @override
-  String get photoHint => 'Ťuknutím vyberte fotografiu,\npotiahnutím ju presuňte';
+  String get photoHint =>
+      'Ťuknutím vyberte fotografiu,\npotiahnutím ju presuňte';
 
   @override
   String get previousPage => 'Predchádzajúca strana';
@@ -204,7 +209,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get size => 'Veľkosť';
 
   @override
-  String get tapPageForText => 'Ťuknite na miesto na strane, kam chcete pridať text';
+  String get tapPageForText =>
+      'Ťuknite na miesto na strane, kam chcete pridať text';
 
   @override
   String get textEditHint => 'Ťuknite na úpravu,\npodržte na odstránenie';
@@ -230,13 +236,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get unsavedChanges => 'Neuložené zmeny';
 
   @override
-  String get unsavedChangesMessage => 'Všetky neuložené úpravy sa stratia. Pokračovať?';
+  String get unsavedChangesMessage =>
+      'Všetky neuložené úpravy sa stratia. Pokračovať?';
 
   @override
-  String get unsavedShareQuestion => 'Existujú neuložené zmeny. Čo chcete zdieľať?';
+  String get unsavedShareQuestion =>
+      'Existujú neuložené zmeny. Čo chcete zdieľať?';
 
   @override
-  String get unsupportedFormat => 'Tento formát nie je podporovaný. Otvorte PDF, fotografiu alebo textový súbor';
+  String get unsupportedFormat =>
+      'Tento formát nie je podporovaný. Otvorte PDF, fotografiu alebo textový súbor';
 
   @override
   String get up => 'Nahor';

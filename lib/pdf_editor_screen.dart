@@ -1,17 +1,21 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'l10n/app_localizations.dart';
-
+import 'package:flutter/foundation.dart' show listEquals;
 
 extension _L10nContext on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this)!;
@@ -31,15 +35,15 @@ const double _kTextPixelRatio = 3;
 /// Zoom limits. Zoom works by laying the viewer out at `zoom x viewport` size
 /// (so the PDF is re-rendered crisply, not just stretched) and panning it.
 const double _kMinZoom = 1;
-const double _kMaxZoom = 3;
+const double _kMaxZoom = 4;
 
-/// Минимальная ширина вставленного фото (в pt) и макс. размер его растра.
+/// Minimum width of an inserted photo (in pt) and the max pixel size of its raster.
 const double _kMinImageWidthPt = 40;
 const int _kStampMaxPixels = 1600;
 
-/// Меню выделения текста в просмотрщике (Copy / Highlight / ...) может
-/// вызвать "назад" у страницы. В течение этого окна после последнего
-/// события выделения такие вызовы не считаются попыткой выйти.
+/// The text selection menu in the viewer (Copy / Highlight / ...) may
+/// trigger a "back" on the page. During this window after the last
+/// selection event such calls are not treated as an attempt to exit.
 const Duration _kSelectionMenuPopWindow = Duration(milliseconds: 1200);
 
 // Highlighter: wide translucent yellow stroke. Multiply keeps dark PDF text
@@ -107,17 +111,169 @@ PdfColor _pdfColor(Color c) => PdfColor(
 
 /// `inherit: false` keeps the Material theme from leaking into the preview,
 /// so the on-screen label and the rasterised PNG use identical metrics.
-TextStyle _labelStyle(double fontSize, Color color) =>
-    TextStyle(inherit: false, fontSize: fontSize, color: color);
+TextStyle _labelStyle(double fontSize, Color color) => TextStyle(
+      inherit: false,
+      fontFamily: _kTextFontFamily,
+      fontSize: fontSize,
+      color: color,
+    );
+
+/// Font used for text labels. The SAME file is declared in pubspec.yaml (for
+/// the on-screen preview) and embedded into the PDF (so the saved text is real,
+/// selectable and searchable text, with Cyrillic / Slovak / Ukrainian support).
+const String _kTextFontFamily = 'PdfEditorText';
+const String _kTextFontAsset = 'assets/fonts/DejaVuSans.ttf';
+
+/// Names of the files embedded into the saved PDF. They hold the editable
+/// source of the user's marks, so the marks can be edited again later.
+const String _kEditableBaseName = 'pdf_editor_base.pdf';
+const String _kEditableDataName = 'pdf_editor_annotations.json';
+const String _kEditableImagePrefix = 'pdf_editor_image_';
+const int _kEditableFormat = 1;
+
+/// Loads (and caches) the TrueType font used to write text into the PDF.
+class _PdfTextFont {
+  static Uint8List? _cache;
+  static bool _tried = false;
+
+  static Future<Uint8List?> load() async {
+    if (_cache != null || _tried) return _cache;
+    _tried = true;
+    try {
+      final ByteData data = await rootBundle.load(_kTextFontAsset);
+      _cache = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      return _cache;
+    } catch (e) {
+      debugPrint('Text font asset not found ($e). Trying system fonts.');
+    }
+    const List<String> candidates = <String>[
+      '/system/fonts/NotoSans-Regular.ttf',
+      '/system/fonts/Roboto-Regular.ttf',
+      '/system/fonts/DroidSans.ttf',
+      r'C:\Windows\Fonts\arial.ttf',
+      '/Library/Fonts/Arial.ttf',
+      '/System/Library/Fonts/Supplemental/Arial.ttf',
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    ];
+    for (final String path in candidates) {
+      try {
+        final File f = File(path);
+        if (await f.exists()) {
+          _cache = await f.readAsBytes();
+          return _cache;
+        }
+      } catch (_) {}
+    }
+    return null; // caller falls back to the old PNG way
+  }
+}
+
+/// Small built-in strings for the search UI (ru / en / sk / uk), so no ARB
+/// file has to be touched.
+String _tr(BuildContext context, String key) {
+  const Map<String, Map<String, String>> t = <String, Map<String, String>>{
+    'fitWidth': <String, String>{
+  'en': 'Fit to width',
+  'ru': 'По ширине',
+  'sk': 'Prispôsobiť šírke',
+  'uk': 'За шириною',
+},
+    'search': <String, String>{
+      'en': 'Search',
+      'ru': 'Поиск',
+      'sk': 'Hľadať',
+      'uk': 'Пошук',
+    },
+    'searchHint': <String, String>{
+      'en': 'Find in document',
+      'ru': 'Найти в документе',
+      'sk': 'Nájsť v dokumente',
+      'uk': 'Знайти в документі',
+    },
+    'notFound': <String, String>{
+      'en': 'Nothing found',
+      'ru': 'Ничего не найдено',
+      'sk': 'Nič sa nenašlo',
+      'uk': 'Нічого не знайдено',
+    },
+    'prev': <String, String>{
+      'en': 'Previous',
+      'ru': 'Предыдущее',
+      'sk': 'Predchádzajúce',
+      'uk': 'Попереднє',
+    },
+    'next': <String, String>{
+      'en': 'Next',
+      'ru': 'Следующее',
+      'sk': 'Ďalšie',
+      'uk': 'Наступне',
+    },
+    'close': <String, String>{
+      'en': 'Close search',
+      'ru': 'Закрыть поиск',
+      'sk': 'Zavrieť hľadanie',
+      'uk': 'Закрити пошук',
+    },
+  };
+  final String lang = Localizations.localeOf(context).languageCode;
+  final Map<String, String>? m = t[key];
+  return m == null ? key : (m[lang] ?? m['en'] ?? key);
+}
+
+// ===========================================================================
+// Language persistence
+// ===========================================================================
+
+/// Remembers the selected UI language between app launches.
+/// Uses a tiny file in the app support directory, so no extra package is needed.
+class _LanguageStore {
+  static const List<String> supported = <String>['en', 'ru', 'sk', 'uk'];
+
+  static Future<File> _file() async {
+    final Directory dir = await getApplicationSupportDirectory();
+    return File('${dir.path}${Platform.pathSeparator}language.txt');
+  }
+
+  static Future<String?> load() async {
+    try {
+      final File f = await _file();
+      if (!await f.exists()) return null;
+      final String code = (await f.readAsString()).trim();
+      return supported.contains(code) ? code : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> save(String code) async {
+    try {
+      final File f = await _file();
+      await f.writeAsString(code, flush: true);
+    } catch (e) {
+      debugPrint('Language save error: $e');
+    }
+  }
+}
+
+/// Optional: call this in main() before runApp() so the app starts directly
+/// in the saved language (no flash of the default one):
+///
+///   WidgetsFlutterBinding.ensureInitialized();
+///   final Locale? saved = await loadSavedLocale();
+///   runApp(MyApp(initialLocale: saved));
+Future<Locale?> loadSavedLocale() async {
+  final String? code = await _LanguageStore.load();
+  return code == null ? null : Locale(code);
+}
 
 // ===========================================================================
 // File formats: detection and conversion to PDF
 // ===========================================================================
 //
-// Идея: любой поддерживаемый файл (фото, текст) превращается в обычный PDF,
-// и дальше работает весь существующий редактор: рисование, текст, зум,
-// поворот страниц, сохранение. Так не нужен отдельный просмотрщик для
-// каждого формата.
+// Idea: any supported file (photo, text) is turned into a regular PDF,
+// and then the whole existing editor works on it: drawing, text, zoom,
+// page rotation, saving. This way no separate viewer is needed for
+// each format.
 
 const List<String> _kImageExtensions = <String>[
   'jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'heic', 'heif',
@@ -127,22 +283,22 @@ const List<String> _kTextExtensions = <String>[
   'txt', 'md', 'log', 'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'ini', 'conf',
 ];
 
-/// Всё, что можно выбрать в диалоге открытия файла.
+/// Everything that can be picked in the open-file dialog.
 const List<String> _kOpenExtensions = <String>[
   'pdf',
   ..._kImageExtensions,
   ..._kTextExtensions,
 ];
 
-/// Длинная сторона страницы, созданной из фото (A4 = 842 pt). Короткая
-/// считается по пропорциям снимка, так что белых полей вокруг фото нет.
+/// Long side of a page created from a photo (A4 = 842 pt). The short side
+/// is computed from the image proportions, so there are no white margins around the photo.
 const double _kPageLongSidePt = 842;
 
-/// Большие фото уменьшаются до этой длинной стороны (в пикселях), чтобы
-/// PDF не раздувался до десятков мегабайт.
+/// Large photos are downscaled to this long side (in pixels) so the
+/// PDF does not balloon to tens of megabytes.
 const int _kImageMaxPixels = 2400;
 
-/// Ограничения для текстовых файлов.
+/// Limits for text files.
 const int _kMaxTextChars = 300000;
 const int _kMaxTextPages = 300;
 
@@ -167,7 +323,7 @@ bool _looksLikeText(Uint8List bytes) {
   final int n = math.min(bytes.length, 4096);
   if (n == 0) return false;
   for (int i = 0; i < n; i++) {
-    if (bytes[i] == 0) return false; // нулевой байт = бинарный файл
+    if (bytes[i] == 0) return false; // a zero byte = binary file
   }
   final String sample = utf8.decode(bytes.sublist(0, n), allowMalformed: true);
   int broken = 0;
@@ -177,8 +333,8 @@ bool _looksLikeText(Uint8List bytes) {
   return broken <= sample.length * 0.02 + 1;
 }
 
-/// Формат определяется по содержимому (сигнатуре), а не только по имени:
-/// файл, пришедший из другого приложения, может вообще не иметь расширения.
+/// The format is detected by content (signature), not only by name:
+/// a file coming from another app may have no extension at all.
 _FileKind _detectFileKind(Uint8List bytes, {String? name}) {
   if (_hasSignature(bytes, const <int>[0x25, 0x50, 0x44, 0x46])) {
     return _FileKind.pdf; // %PDF
@@ -192,7 +348,7 @@ _FileKind _detectFileKind(Uint8List bytes, {String? name}) {
     return _FileKind.image; // WEBP = RIFF....WEBP
   }
   if (_hasSignature(bytes, const <int>[0x66, 0x74, 0x79, 0x70], 4)) {
-    // 'ftyp' - контейнер HEIC/HEIF (фото с iPhone)
+    // 'ftyp' - HEIC/HEIF container (iPhone photos)
     return _FileKind.image;
   }
 
@@ -205,8 +361,8 @@ _FileKind _detectFileKind(Uint8List bytes, {String? name}) {
   return _FileKind.unsupported;
 }
 
-/// Превращает любой поддерживаемый файл в PDF. PDF возвращается как есть.
-/// Бросает [FormatException] с понятным сообщением для пользователя.
+/// Turns any supported file into a PDF. A PDF is returned as is.
+/// Throws a [FormatException] with a user-friendly message.
 Future<Uint8List> _convertToPdf(Uint8List bytes, {String? name}) async {
   switch (_detectFileKind(bytes, name: name)) {
     case _FileKind.pdf:
@@ -230,8 +386,8 @@ class _DecodedImage {
   final int height;
 }
 
-/// Декодирует любое поддерживаемое фото и возвращает PNG (длинная сторона
-/// не больше [maxSide] px).
+/// Decodes any supported photo and returns a PNG (long side
+/// at most [maxSide] px).
 Future<_DecodedImage> _decodeImageToPng(Uint8List bytes, int maxSide) async {
   final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
   ui.ImageDescriptor? descriptor;
@@ -243,7 +399,7 @@ Future<_DecodedImage> _decodeImageToPng(Uint8List bytes, int maxSide) async {
       final int h = descriptor.height;
       final bool shrink = math.max(w, h) > maxSide;
 
-      // Задаём только одну сторону - вторая подбирается по пропорциям.
+      // Only one side is set - the other is derived from the proportions.
       codec = await descriptor.instantiateCodec(
         targetWidth: shrink && w >= h ? maxSide : null,
         targetHeight: shrink && h > w ? maxSide : null,
@@ -254,7 +410,7 @@ Future<_DecodedImage> _decodeImageToPng(Uint8List bytes, int maxSide) async {
       );
     }
 
-    final ui.FrameInfo frame = await codec.getNextFrame(); // у GIF - 1-й кадр
+    final ui.FrameInfo frame = await codec.getNextFrame(); // for GIF - the first frame
     final ui.Image image = frame.image;
     final int iw = image.width;
     final int ih = image.height;
@@ -276,7 +432,7 @@ Future<_DecodedImage> _decodeImageToPng(Uint8List bytes, int maxSide) async {
   }
 }
 
-/// Одно фото = одна страница PDF с теми же пропорциями.
+/// One photo = one PDF page with the same proportions.
 Future<Uint8List> _imageToPdf(Uint8List bytes) async {
   final _DecodedImage img = await _decodeImageToPng(bytes, _kImageMaxPixels);
   final int iw = img.width;
@@ -293,7 +449,7 @@ Future<Uint8List> _imageToPdf(Uint8List bytes) async {
     final PdfPage page = doc.pages.add();
     final Size client = page.getClientSize();
 
-    // contain: картинка не искажается, даже если размер страницы округлился.
+    // contain: the picture is not distorted even if the page size was rounded.
     final double fit =
         math.min(client.width / iw, client.height / ih).toDouble();
     final double dw = iw * fit;
@@ -312,42 +468,40 @@ Future<Uint8List> _imageToPdf(Uint8List bytes) async {
 // Placed items (text labels and photos)
 // ===========================================================================
 //
-// Подпись или фото хранится так:
-//  - `center`: центр в КАНОНИЧЕСКИХ координатах страницы (до поворота), 0..1;
-//  - `turns`: на сколько четвертей оборота по часовой стрелке содержимое
-//    повёрнуто относительно канонической страницы.
+// A signature or photo is stored like this:
+//  - `center`: center in CANONICAL page coordinates (before rotation), 0..1;
+//  - `turns`: how many clockwise quarter turns the content is
+//    rotated relative to the canonical page.
 //
-// В момент создания turns = -(поворот страницы), поэтому на уже
-// перевёрнутой странице подпись выглядит прямо. Если потом повернуть
-// страницу, элемент поворачивается вместе с ней. На экране он повёрнут на
-// (поворот страницы + turns) четвертей.
+// At creation time turns = -(page rotation), so on an already
+// flipped page the signature looks upright. If the page is rotated later,
+// the element rotates with it. On screen it is rotated by
+// (page rotation + turns) quarter turns.
 
-/// Четверти оборота по часовой стрелке (0..3) для поворота страницы.
+/// Clockwise quarter turns (0..3) for a page rotation.
 int _quarterTurns(PdfPageRotateAngle rotation) =>
     _kRotationOrder.indexOf(rotation);
 
 double _clamp01(double v) => v.clamp(0.0, 1.0).toDouble();
 
-/// Размер подписи в pt (с отступами) - те же метрики, что у PNG при сохранении.
-Size _measureTextSize(String text, double fontSize) {
-  const double pad = _kTextPaddingPt * _kTextPixelRatio;
+/// Size of a label in pt (with padding) - the same metrics as the saved PNG.
+Size _measureTextSize(String text, double fontSize, {required double maxWidth}) {
+  const double ratio = _kTextPixelRatio;
+  const double pad = _kTextPaddingPt * ratio;
   final TextPainter painter = TextPainter(
     text: TextSpan(
       text: text,
-      style: _labelStyle(fontSize * _kTextPixelRatio, const Color(0xFF000000)),
+      style: _labelStyle(fontSize * ratio, const Color(0xFF000000)),
     ),
     textDirection: TextDirection.ltr,
-  )..layout();
-  final Size size = Size(
-    (painter.width + pad * 2) / _kTextPixelRatio,
-    (painter.height + pad * 2) / _kTextPixelRatio,
-  );
+  )..layout(maxWidth: math.max(1.0, (maxWidth - 2 * _kTextPaddingPt) * ratio));
+  final Size size = Size(maxWidth, (painter.height + pad * 2) / ratio);
   painter.dispose();
   return size;
 }
 
-/// Где элемент реально окажется на странице (в pt, каноническая система).
-/// Используется и для предпросмотра, и для сохранения - поэтому они совпадают.
+/// Where the element will actually end up on the page (in pt, canonical system).
+/// Used for both preview and saving - which is why they match.
 class _Placement {
   const _Placement({
     required this.content,
@@ -356,16 +510,16 @@ class _Placement {
     required this.fit,
   });
 
-  /// Размер содержимого (до поворота), уже уменьшенный чтобы влезть в страницу.
+  /// Content size (before rotation), already shrunk to fit the page.
   final Size content;
 
-  /// Габарит на канонической странице (с учётом поворота на turns).
+  /// Footprint on the canonical page (taking the turns rotation into account).
   final Size bbox;
 
-  /// Центр в pt, прижатый так, чтобы элемент не выходил за страницу.
+  /// Center in pt, clamped so the element does not leave the page.
   final Offset center;
 
-  /// Коэффициент уменьшения (1 = без уменьшения).
+  /// Shrink factor (1 = no shrinking).
   final double fit;
 }
 
@@ -401,7 +555,7 @@ _Placement _placementOf(_PlacedAnnotation a, Size page) {
   );
 }
 
-/// Поворачивает PNG на [turns] четвертей по часовой стрелке.
+/// Rotates a PNG by [turns] clockwise quarter turns.
 Future<Uint8List> _rotatePngQuarterTurns(Uint8List png, int turns) async {
   final int k = turns % 4;
   if (k == 0) return png;
@@ -445,9 +599,9 @@ Future<Uint8List> _rotatePngQuarterTurns(Uint8List png, int turns) async {
   }
 }
 
-/// Текстовый файл -> страницы A4. Текст рисуется средствами Flutter и
-/// кладётся в PDF как картинка (как и подписи в редакторе), поэтому
-/// кириллица и любые другие алфавиты работают без своих шрифтов.
+/// Text file -> A4 pages. Text is drawn with Flutter and
+/// placed into the PDF as an image (like labels in the editor), so
+/// Cyrillic and any other alphabets work without custom fonts.
 Future<Uint8List> _textToPdf(Uint8List bytes) async {
   String text = utf8.decode(bytes, allowMalformed: true);
   if (text.startsWith('\uFEFF')) text = text.substring(1);
@@ -462,7 +616,7 @@ Future<Uint8List> _textToPdf(Uint8List bytes) async {
   const double margin = 40;
   const double contentW = pageW - margin * 2;
   const double contentH = pageH - margin * 2;
-  const double ratio = 2; // пикселей на pt: чёткий текст при зуме
+  const double ratio = 2;
 
   final TextPainter painter = TextPainter(
     text: TextSpan(
@@ -472,11 +626,14 @@ Future<Uint8List> _textToPdf(Uint8List bytes) async {
     textDirection: TextDirection.ltr,
   )..layout(maxWidth: contentW);
 
-  // Разбиваем на страницы по границам строк, чтобы строка не разрезалась.
+  // Pagination + storing the text of each line.
   final List<double> starts = <double>[0];
   final List<double> ends = <double>[];
+  final List<_TextLine> lines = <_TextLine>[];
   double lastBottom = 0;
+  int lastEnd = 0;
   bool capped = false;
+
   for (final ui.LineMetrics m in painter.computeLineMetrics()) {
     final double top = m.baseline - m.ascent;
     final double bottom = m.baseline + m.descent;
@@ -489,14 +646,72 @@ Future<Uint8List> _textToPdf(Uint8List bytes) async {
       starts.add(top);
     }
     lastBottom = bottom;
+
+    final TextPosition pos = painter.getPositionForOffset(
+      Offset(m.left + 1, m.baseline - m.ascent / 2),
+    );
+    final TextRange range = painter.getLineBoundary(pos);
+    if (range.start >= lastEnd && range.end > range.start) {
+      lastEnd = range.end;
+      final String line = text
+          .substring(range.start, math.min(range.end, text.length))
+          .replaceAll(RegExp(r'[\r\n]+$'), '');
+      if (line.trim().isNotEmpty) {
+        lines.add(_TextLine(
+          page: starts.length - 1,
+          top: top,
+          bottom: bottom,
+          left: m.left,
+          text: line,
+        ));
+      }
+    }
   }
   if (!capped) ends.add(lastBottom);
 
+  final Uint8List? fontData = await _PdfTextFont.load();
   final PdfDocument doc = PdfDocument();
   try {
     doc.pageSettings.margins.all = 0;
     doc.pageSettings.size = const Size(pageW, pageH);
 
+    // ---------- VECTOR PATH: actual text, to be searched for and copied ----------
+    if (fontData != null) {
+      try {
+        final PdfTrueTypeFont font = PdfTrueTypeFont(fontData, 11);
+        final PdfSolidBrush brush = PdfSolidBrush(PdfColor(0x21, 0x21, 0x21));
+        final PdfStringFormat format = PdfStringFormat(
+          wordWrap: PdfWordWrapType.none,
+          lineAlignment: PdfVerticalAlignment.top,
+        );
+
+        for (int i = 0; i < starts.length; i++) {
+          final PdfPage page = doc.pages.add();
+          for (final _TextLine l in lines.where((_TextLine l) => l.page == i)) {
+            // Center the PDF font string within the Flutter string (due to height: 1.3).
+            final double y = margin +
+                (l.top - starts[i]) +
+                ((l.bottom - l.top) - font.height) / 2;
+            page.graphics.drawString(
+              l.text,
+              font,
+              brush: brush,
+              bounds: Rect.fromLTWH(margin + l.left, y, 0, 0),
+              format: format,
+            );
+          }
+        }
+        return Uint8List.fromList(await doc.save());
+      } catch (e) {
+        debugPrint('Vector text PDF failed, using PNG fallback: $e');
+        // Discard the incomplete document and switch to the raster path.
+        while (doc.pages.count > 0) {
+          doc.pages.removeAt(0);
+        }
+      }
+    }
+
+    // ---------- BACKUP PATH: how it used to be (PNG, non-searchable) ----------
     for (int i = 0; i < starts.length; i++) {
       final double start = starts[i];
       final double visibleH = math.min(contentH, ends[i] - start + 1);
@@ -533,7 +748,6 @@ Future<Uint8List> _textToPdf(Uint8List bytes) async {
     doc.dispose();
   }
 }
-
 // ===========================================================================
 // Recent documents + sharing helpers
 // ===========================================================================
@@ -679,46 +893,61 @@ class _RecentDocumentsService {
     );
   }
 
-  static Future<void> add({
-    required Uint8List bytes,
-    required String fileName,
-  }) async {
-    final Directory dir = await _directory();
-    final List<_RecentDocument> documents = await load();
+ static Future<bool> _sameContent(_RecentDocument d, Uint8List bytes) async {
+  if (d.size != bytes.length) return false;
+  try {
+    final File f = File(d.path);
+    if (!await f.exists()) return false;
+    return listEquals(await f.readAsBytes(), bytes);
+  } catch (_) {
+    return false;
+  }
+}
+static Future<String> add({
+  required Uint8List bytes,
+  required String fileName,
+  String? replacePath,
+}) async {
+  final Directory dir = await _directory();
+  final List<_RecentDocument> documents = await load();
 
-    // One visible entry per file name. Opening the same file refreshes its copy.
-    final List<_RecentDocument> old = documents
-        .where((_RecentDocument d) => d.name == fileName)
-        .toList();
-    for (final _RecentDocument d in old) {
-      final File f = File(d.path);
-      if (await f.exists()) await f.delete();
+  final List<_RecentDocument> old = <_RecentDocument>[];
+  for (final _RecentDocument d in documents) {
+    if (replacePath != null && d.path == replacePath) {
+      old.add(d);
+    } else if (d.name == fileName && await _sameContent(d, bytes)) {
+      old.add(d);
     }
-    documents.removeWhere((_RecentDocument d) => d.name == fileName);
-
-    final String stored =
-        '${DateTime.now().microsecondsSinceEpoch}_${_safeFileName(fileName)}';
-    final File copy = File('${dir.path}${Platform.pathSeparator}$stored');
-    await copy.writeAsBytes(bytes, flush: true);
-
-    documents.insert(
-      0,
-      _RecentDocument(
-        name: fileName,
-        path: copy.path,
-        lastOpened: DateTime.now(),
-        size: bytes.length,
-      ),
-    );
-
-    while (documents.length > _maxDocuments) {
-      final _RecentDocument removed = documents.removeLast();
-      final File f = File(removed.path);
-      if (await f.exists()) await f.delete();
-    }
-    await _saveIndex(documents);
+  }
+  for (final _RecentDocument d in old) {
+    final File f = File(d.path);
+    if (await f.exists()) await f.delete();
+    documents.remove(d);
   }
 
+  final String stored =
+      '${DateTime.now().microsecondsSinceEpoch}_${_safeFileName(fileName)}';
+  final File copy = File('${dir.path}${Platform.pathSeparator}$stored');
+  await copy.writeAsBytes(bytes, flush: true);
+
+  documents.insert(
+    0,
+    _RecentDocument(
+      name: fileName,
+      path: copy.path,
+      lastOpened: DateTime.now(),
+      size: bytes.length,
+    ),
+  );
+
+  while (documents.length > _maxDocuments) {
+    final _RecentDocument removed = documents.removeLast();
+    final File f = File(removed.path);
+    if (await f.exists()) await f.delete();
+  }
+  await _saveIndex(documents);
+  return copy.path;
+}
   static Future<Uint8List?> read(_RecentDocument document) async {
     final File file = File(document.path);
     if (!await file.exists()) return null;
@@ -958,7 +1187,8 @@ class _PdfEditorView extends StatefulWidget {
 
 enum _EditorTool { none, draw, highlight, text, image }
 
-class _PdfEditorViewState extends State<_PdfEditorView> {
+class _PdfEditorViewState extends State<_PdfEditorView>
+    with SingleTickerProviderStateMixin {
   final PdfViewerController controller = PdfViewerController();
 static const MethodChannel _openFileChannel =
     MethodChannel('pdf_editor/open_file');
@@ -968,7 +1198,9 @@ static const MethodChannel _openFileChannel =
   int _documentRevision = 0;
   bool _documentLoaded = false;
   int _currentPage = 1;
-
+  String? _lastSavedRecentPath;
+  Offset? _lastTapPosition;
+Duration? _lastTapTime;
   /// Page we must land on after a (re)load. While set, the viewer's own
   /// onPageChanged events are ignored: right after a rotate/move the viewer
   /// re-lays out and briefly reports a wrong page (e.g. page 2).
@@ -984,7 +1216,7 @@ static const MethodChannel _openFileChannel =
 
   Color _penColor = _kPalette.first;
   double _penWidth = 2; // in PDF points, same unit as the saved line width
-
+  bool _immersive = false;
   // All custom edits live in ONE ordered list. That single source of truth is
   // what makes undo/redo work the same way for strokes and text.
   //
@@ -994,15 +1226,32 @@ static const MethodChannel _openFileChannel =
   final List<_PageAnnotation> _redoStack = <_PageAnnotation>[];
   _StrokeAnnotation? _activeStroke;
 
-  /// Фото, выбранное в режиме "Фото" (рамка + ручка размера).
+  /// Photo selected in "Photo" mode (frame + resize handle).
   _ImageAnnotation? _selectedImage;
+  _TextAnnotation? _selectedText;
 
-  // Состояние выделения текста во встроенном просмотрщике. Нужно, чтобы
-  // отличать нажатие в его меню (Copy / Highlight ...) от настоящего "назад".
+  // Text selection state in the built-in viewer. Needed to
+  // tell a tap in its menu (Copy / Highlight ...) from a real "back".
   bool _textSelectionActive = false;
   DateTime _lastSelectionEvent = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Выбранное фото, если оно ещё существует и лежит на текущей странице.
+  // ---- search ----
+  bool _searchOpen = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  PdfTextSearchResult _searchResult = PdfTextSearchResult();
+  bool _searchNotFound = false;
+
+  /// While searching, the viewer shows a temporary copy of the document in
+  /// which the user's marks are already written as real text. That is what
+  /// makes the added text findable. The editable working document
+  /// ([pdfBytes]) is never replaced by this copy.
+  Uint8List? _searchCopyBytes;
+  String? _pendingSearchQuery;
+  Timer? _searchDebounce;
+  String _searchedQuery = '';
+
+  /// The selected photo, if it still exists and is on the current page.
   _ImageAnnotation? get _selected {
     final _ImageAnnotation? i = _selectedImage;
     if (i == null ||
@@ -1032,30 +1281,44 @@ static const MethodChannel _openFileChannel =
   Size _viewport = Size.zero;
   bool _settling = false;
   int _settleSerial = 0;
-@override
-void initState() {
-  super.initState();
 
-  _openFileChannel.setMethodCallHandler(
-    (MethodCall call) async {
-      if (call.method == 'openPdf') {
-        final dynamic arguments = call.arguments;
+  // ---- inertial panning ("slide" after a quick swipe while zoomed) ----
+  Ticker? _flingTicker;
+  FrictionSimulation? _flingX;
+  FrictionSimulation? _flingY;
+  VelocityTracker? _velocityTracker;
+  bool _panning = false;
 
-        if (arguments is Uint8List) {
-          await _openAnyBytes(arguments);
+  /// Friction of the slide. Lower = slides longer.
+  static const double _kFlingDrag = 0.135;
+  @override
+  void initState() {
+    super.initState();
+
+    _openFileChannel.setMethodCallHandler(
+      (MethodCall call) async {
+        if (call.method == 'openPdf') {
+          await _openExternalPayload(call.arguments);
         }
-      }
-    },
-  );
+      },
+    );
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _checkInitialPdf();
-  });
-}
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreLanguage();
+      _checkInitialPdf();
+    });
+  }
+
   @override
   void dispose() {
     _openFileChannel.setMethodCallHandler(null);
+    _flingTicker?.dispose();
+    _searchDebounce?.cancel();
+    _searchResult.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _searchFocus.dispose();
     controller.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
@@ -1084,7 +1347,26 @@ void initState() {
         return code;
     }
   }
+Future<void> _toggleImmersive() async {
+  if (pdfBytes == null) return;
 
+  final bool next = !_immersive;
+
+  setState(() {
+    _immersive = next;
+  });
+
+  await SystemChrome.setEnabledSystemUIMode(
+    next ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+  );
+
+  if (!mounted) return;
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    _settleViewer();
+  });
+}
   Future<bool> _confirm({
     required String title,
     required String message,
@@ -1137,6 +1419,8 @@ void initState() {
       _pageInfos = <_PageInfo>[];
       _annotations.clear();
       _redoStack.clear();
+      _selectedText = null;
+      _selectedImage = null;
       _activeStroke = null;
       _currentPage = 1;
       _pendingPage = null;
@@ -1181,6 +1465,7 @@ void initState() {
     VoidCallback? alsoUpdate,
   }) {
     controller.annotationMode = PdfAnnotationMode.none;
+    _resetSearchState();
     setState(() {
       pdfBytes = bytes;
       _pageInfos = infos;
@@ -1197,31 +1482,90 @@ void initState() {
   }
 
   // =================== OPEN PDF ===================
-  Future<void> _checkInitialPdf() async {
-  try {
-    final Uint8List? bytes =
-        await _openFileChannel.invokeMethod<Uint8List>(
-      'getInitialPdf',
-    );
-
-    if (bytes != null && bytes.isNotEmpty) {
-      await _openAnyBytes(bytes);
-    }
-  } catch (e) {
-    debugPrint('Initial PDF error: $e');
+  /// Applies the language saved on the previous launch.
+  Future<void> _restoreLanguage() async {
+    final String? code = await _LanguageStore.load();
+    if (code == null || !mounted) return;
+    if (Localizations.localeOf(context).languageCode == code) return;
+    widget.onLanguageChanged(Locale(code));
   }
-}
+
+  /// Opens a file handed over by the platform ("Open with" / share intent).
+  /// [payload] is either raw bytes or a map `{bytes: Uint8List, name: String}`.
+  /// Without a real file name every such file used to be called
+  /// "document.pdf" and replaced the previous one in the recent list.
+  Future<void> _openExternalPayload(dynamic payload, {String? name}) async {
+    Uint8List? bytes;
+    String? fileName = name;
+
+    if (payload is Uint8List) {
+      bytes = payload;
+    } else if (payload is Map) {
+      final Object? b = payload['bytes'];
+      if (b is Uint8List) bytes = b;
+      final Object? n = payload['name'] ?? payload['fileName'];
+      if (n is String && n.trim().isNotEmpty) fileName = n;
+    }
+
+    if (bytes == null || bytes.isEmpty) return;
+    if (!await _confirmDiscardChanges()) return;
+    if (!mounted) return;
+
+    await _openAnyBytes(
+      bytes,
+      name: fileName ?? _fallbackExternalName(bytes),
+    );
+  }
+
+  /// A unique name for files that arrive without one, so they do not
+  /// overwrite each other in the recent documents list.
+  String _fallbackExternalName(Uint8List bytes) {
+    final String ext;
+    switch (_detectFileKind(bytes)) {
+      case _FileKind.image:
+        ext = 'jpg';
+      case _FileKind.text:
+        ext = 'txt';
+      case _FileKind.pdf:
+      case _FileKind.unsupported:
+        ext = 'pdf';
+    }
+    final DateTime t = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return 'document_${t.year}${two(t.month)}${two(t.day)}_'
+        '${two(t.hour)}${two(t.minute)}${two(t.second)}.$ext';
+  }
+
+  Future<void> _checkInitialPdf() async {
+    try {
+      final dynamic payload =
+          await _openFileChannel.invokeMethod<dynamic>('getInitialPdf');
+      if (payload == null) return;
+
+      // Native side may optionally provide the real name separately.
+      String? name;
+      try {
+        name = await _openFileChannel.invokeMethod<String>('getInitialFileName');
+      } catch (_) {
+        name = null;
+      }
+
+      await _openExternalPayload(payload, name: name);
+    } catch (e) {
+      debugPrint('Initial PDF error: $e');
+    }
+  }
   Future<Uint8List?> _readPicked(PlatformFile picked) async {
     try {
-      // В file_picker 12+ байты читаются методом файла, а не withData.
+      // In file_picker 12+ bytes are read via the file method, not withData.
       return await picked.readAsBytes();
     } catch (_) {
       return null;
     }
   }
 
-  /// Открывает PDF, фото или текстовый файл. Фото и текст сначала
-  /// конвертируются в PDF, дальше всё работает как с обычным PDF.
+  /// Opens a PDF, photo or text file. Photos and text are first
+  /// converted to PDF, then everything works like with a regular PDF.
   Future<void> openFile() async {
     if (_busy || !await _confirmDiscardChanges()) return;
 
@@ -1251,7 +1595,7 @@ void initState() {
 });
   }
 
-  /// Определяет формат, при необходимости конвертирует в PDF и открывает.
+  /// Detects the format, converts to PDF if needed and opens it.
   Future<void> _openAnyBytes(
     Uint8List bytes, {
     String? name,
@@ -1287,6 +1631,7 @@ void initState() {
     setState(() {
       _originalFileBytes = original;
       _currentFileName = fileName;
+      _lastSavedRecentPath = null;
     });
 
     if (addToRecent) {
@@ -1301,8 +1646,8 @@ void initState() {
     }
   }
 
-  /// Дописывает страницы из другого файла (PDF / фото / текст) в конец
-  /// текущего документа. Так из нескольких фото можно собрать один PDF.
+  /// Appends pages from another file (PDF / photo / text) to the end
+  /// of the current document. This lets you build one PDF from several photos.
   Future<void> addPagesFromFile() async {
     if (_busy || pdfBytes == null) return;
 
@@ -1340,8 +1685,8 @@ void initState() {
       final List<_PageInfo> infos = _readPageInfos(merged);
 
       if (!mounted) return;
-      // Новые страницы добавлены в конец, поэтому индексы старых правок
-      // не меняются - ремап не нужен.
+      // New pages are appended at the end, so the indexes of old edits
+      // do not change - no remapping needed.
       _applyNewDocument(
         merged,
         infos,
@@ -1356,21 +1701,27 @@ void initState() {
     final PdfDocument doc = PdfDocument(inputBytes: base);
     final PdfDocument source = PdfDocument(inputBytes: addition);
     try {
-      // Те же нулевые поля, что и в _reorderPage(): иначе содержимое
-      // страницы сдвигается на 40 pt.
+      // The same zero margins as in _reorderPage(): otherwise the page content
+      // shifts by 40 pt.
       doc.pageSettings.margins.all = 0;
       final PdfMargins noMargins = PdfMargins()..all = 0;
+
+      final int firstNew = doc.pages.count;
+      final Map<int, PdfPageRotateAngle> rotations =
+          <int, PdfPageRotateAngle>{};
 
       for (int i = 0; i < source.pages.count; i++) {
         final PdfPage src = source.pages[i];
         final PdfPage page =
             doc.pages.insert(doc.pages.count, src.size, noMargins);
         page.rotation = src.rotation;
+        rotations[firstNew + i] = src.rotation;
         page.graphics.drawPdfTemplate(src.createTemplate(), Offset.zero);
       }
 
-      // source должен жить до конца save(): шаблоны ссылаются на его ресурсы.
-      return Uint8List.fromList(await doc.save());
+      // source must live until save() finishes: templates reference its resources.
+      final Uint8List saved = Uint8List.fromList(await doc.save());
+      return await _restoreRotations(saved, rotations);
     } finally {
       source.dispose();
       doc.dispose();
@@ -1390,13 +1741,31 @@ void initState() {
       doc.dispose();
     }
   }
-Future<void> _openPdfBytes(Uint8List bytes) async {
-  if (bytes.isEmpty) return;
+Future<void> _openPdfBytes(Uint8List incoming) async {
+  if (incoming.isEmpty) return;
 
-  final List<_PageInfo> infos;
+  // A file saved by this editor carries the original pages and the editable
+  // marks inside it. Restore them, so the marks can be edited again.
+  Uint8List bytes = incoming;
+  List<_PageAnnotation> restored = <_PageAnnotation>[];
+  final _EditableBundle? bundle = _readEditableBundle(incoming);
 
+  List<_PageInfo> infos;
   try {
-    infos = _readPageInfos(bytes);
+    if (bundle != null) {
+      infos = _readPageInfos(bundle.baseBytes);
+      final bool consistent = infos.length == bundle.pageCount &&
+          bundle.annotations.every(
+              (_PageAnnotation a) => a.pageIndex >= 0 && a.pageIndex < infos.length);
+      if (consistent) {
+        bytes = bundle.baseBytes;
+        restored = bundle.annotations;
+      } else {
+        infos = _readPageInfos(incoming);
+      }
+    } else {
+      infos = _readPageInfos(incoming);
+    }
   } catch (_) {
     _showMessage(context.l10n.couldNotReadPdf);
 
@@ -1407,6 +1776,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
   controller.annotationMode = PdfAnnotationMode.none;
   controller.zoomLevel = 1;
+  _resetSearchState();
 
   setState(() {
     pdfBytes = bytes;
@@ -1421,8 +1791,12 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     _documentLoaded = false;
     _documentRevision++;
 
-    _annotations.clear();
+    _annotations
+      ..clear()
+      ..addAll(restored);
     _redoStack.clear();
+    _selectedText = null;
+    _selectedImage = null;
 
     _activeStroke = null;
 
@@ -1434,6 +1808,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   // =================== TOOL SELECTION ===================
   void _selectTool(_EditorTool tool) {
     if (pdfBytes == null) return;
+    if (_searchOpen) _closeSearch();
 
     if (_tool == tool) {
       tool = _EditorTool.none;
@@ -1446,6 +1821,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
       _tool = tool;
       _activeStroke = null;
       _selectedImage = null;
+      _selectedText = null;
     });
   }
 
@@ -1547,6 +1923,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
     setState(() {
       _redoStack.add(_annotations.removeAt(i));
+      _dirty = true;
     });
   }
 
@@ -1676,13 +2053,14 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     final _PageInfo info = _pageInfos[pageIndex];
     final PdfPageRotateAngle rotation = info.rotation;
 
-    // Подпись всегда создаётся "прямо" относительно того, что видит человек:
-    // на перевёрнутой странице она компенсирует поворот страницы.
+    // A signature is always created "upright" relative to what the user sees:
+    // on a flipped page it compensates for the page rotation.
     final int turns = (4 - _quarterTurns(rotation)) % 4;
 
-    // Место нажатия = левый верхний угол подписи на экране.
-    final Size size = _measureTextSize(result.text, result.fontSize);
+    // Tap position = top-left corner of the signature on screen.
     final Size display = _displayPageSize(info);
+    final double widthPt = math.min(220.0, display.width);
+    final Size size = _measureTextSize(result.text, result.fontSize, maxWidth: widthPt);
     final Offset tap = Offset(
       _clamp01((localPosition.dx - pageRect.left) / pageRect.width),
       _clamp01((localPosition.dy - pageRect.top) / pageRect.height),
@@ -1696,6 +2074,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
       pageIndex: pageIndex,
       text: result.text,
       fontSize: result.fontSize,
+      widthPt: widthPt,
       color: _penColor,
       center: _displayToCanonicalNormalized(centerDisplay, rotation),
       turns: turns,
@@ -1738,18 +2117,48 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     setState(() {
       _annotations.remove(annotation);
       _redoStack.remove(annotation);
+      if (identical(_selectedText, annotation)) _selectedText = null;
       _dirty = true;
     });
   }
 
-  /// Записывает обратно центр, прижатый к странице (чтобы при уменьшении
-  /// элемент не "возвращался" на старое место за краем).
+  /// Writes back the center clamped to the page (so that when shrinking,
+  /// the element does not "return" to its old place beyond the edge).
   void _normalizeCenter(_PlacedAnnotation a, _PageInfo info) {
     final _Placement pl = _placementOf(a, info.size);
     a.center = Offset(
       pl.center.dx / info.size.width,
       pl.center.dy / info.size.height,
     );
+  }
+
+  void _resizeTextByDrag(
+    _TextAnnotation annotation,
+    Offset delta,
+    Rect pageRect,
+    int pageIndex,
+  ) {
+    final _PageInfo info = _pageInfos[pageIndex];
+    final double scale = _pageScale(pageRect, info);
+    if (scale <= 0) return;
+    final int turns = (_quarterTurns(info.rotation) + annotation.turns) % 4;
+    final double movement = switch (turns) {
+      1 => delta.dy,
+      2 => -delta.dx,
+      3 => -delta.dy,
+      _ => delta.dx,
+    };
+    // The unrotated text width cannot exceed the corresponding page dimension.
+    final double maxWidth = annotation.turns.isOdd
+        ? info.size.height
+        : info.size.width;
+    setState(() {
+      annotation.widthPt = (annotation.widthPt + movement / scale)
+          .clamp(math.min(60.0, maxWidth), maxWidth)
+          .toDouble();
+      _normalizeCenter(annotation, info);
+      _dirty = true;
+    });
   }
 
   void _movePlaced(
@@ -1791,7 +2200,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     });
   }
 
-  /// Тянем уголок: размер меняется пропорционально, вдоль диагонали фото.
+  /// Dragging the corner: the size changes proportionally, along the photo diagonal.
   void _resizeImageByDrag(
     _ImageAnnotation img,
     Offset delta,
@@ -1808,15 +2217,15 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
   Future<void> _onImageToolPressed() async {
     if (_tool == _EditorTool.image) {
-      _selectTool(_EditorTool.image); // повторное нажатие выключает режим
+      _selectTool(_EditorTool.image); // tapping again turns the mode off
       return;
     }
     _selectTool(_EditorTool.image);
     await _insertImage();
   }
 
-  /// Выбирает фото и кладёт его на текущую страницу (в центр). Дальше его
-  /// можно двигать, менять размер и удалять.
+  /// Picks a photo and puts it on the current page (in the center). Then it
+  /// can be moved, resized and deleted.
   Future<void> _insertImage() async {
     if (_busy || pdfBytes == null || _pageInfos.isEmpty) return;
 
@@ -1858,7 +2267,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         png: decoded.png,
         pixelWidth: decoded.width,
         pixelHeight: decoded.height,
-        // Стартовый размер: 40% ширины страницы, но не выше половины высоты.
+        // Initial size: 40% of the page width, but not more than half of the height.
         widthPt: math.min(display.width * 0.4, display.height * 0.5 * aspect),
         center: _displayToCanonicalNormalized(
             const Offset(0.5, 0.5), info.rotation),
@@ -2008,10 +2417,11 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
       final PdfMargins noMargins = PdfMargins()..all = 0;
 
       final PdfPage sourcePage = sourceDoc.pages[from];
+      final PdfPageRotateAngle sourceRotation = sourcePage.rotation;
       final int insertAt = to < from ? to : to + 1;
       final PdfPage newPage =
           doc.pages.insert(insertAt, sourcePage.size, noMargins);
-      newPage.rotation = sourcePage.rotation;
+      newPage.rotation = sourceRotation;
       newPage.graphics
           .drawPdfTemplate(sourcePage.createTemplate(), Offset.zero);
 
@@ -2020,9 +2430,41 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
       // IMPORTANT: sourceDoc must stay alive until doc.save() has finished -
       // the template still references its resources. It is disposed in
       // `finally`, i.e. only after the bytes are produced.
-      return Uint8List.fromList(await doc.save());
+      final Uint8List saved = Uint8List.fromList(await doc.save());
+
+      // A page created via pages.insert() can lose its /Rotate value, so the
+      // moved page snapped back to the standard position. Re-apply it on the
+      // saved document, the same way rotatePage() does.
+      return await _restoreRotations(
+        saved,
+        <int, PdfPageRotateAngle>{to: sourceRotation},
+      );
     } finally {
       sourceDoc.dispose();
+      doc.dispose();
+    }
+  }
+
+  /// Sets the given page rotations on an already saved document.
+  Future<Uint8List> _restoreRotations(
+    Uint8List bytes,
+    Map<int, PdfPageRotateAngle> rotations,
+  ) async {
+    final Map<int, PdfPageRotateAngle> wanted =
+        Map<int, PdfPageRotateAngle>.from(rotations)
+          ..removeWhere((int _, PdfPageRotateAngle r) =>
+              r == PdfPageRotateAngle.rotateAngle0);
+    if (wanted.isEmpty) return bytes;
+
+    final PdfDocument doc = PdfDocument(inputBytes: bytes);
+    try {
+      wanted.forEach((int index, PdfPageRotateAngle angle) {
+        if (index >= 0 && index < doc.pages.count) {
+          doc.pages[index].rotation = angle;
+        }
+      });
+      return Uint8List.fromList(await doc.save());
+    } finally {
       doc.dispose();
     }
   }
@@ -2097,35 +2539,29 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     return savedUri != null;
   }
 
+  /// After saving, the marks stay editable objects in the editor. The saved
+  /// file also carries them inside, so they are editable after re-opening.
   Future<void> _acceptSavedVersion(
     Uint8List finalBytes, {
     required String fileName,
   }) async {
-    final List<_PageInfo> infos = _readPageInfos(finalBytes);
     if (!mounted) return;
 
-    _applyNewDocument(
-      finalBytes,
-      infos,
-      currentPage: _currentPage,
-      dirty: false,
-      alsoUpdate: () {
-        _annotations.clear();
-        _redoStack.clear();
-        _selectedImage = null;
-        _originalFileBytes = Uint8List.fromList(finalBytes);
-        _currentFileName = fileName;
-      },
-    );
+    setState(() {
+      _dirty = false;
+      _originalFileBytes = Uint8List.fromList(finalBytes);
+      _currentFileName = fileName;
+    });
 
-    try {
-      await _RecentDocumentsService.add(
-        bytes: finalBytes,
-        fileName: fileName,
-      );
-    } catch (e) {
-      debugPrint('Recent documents error: $e');
-    }
+   try {
+  _lastSavedRecentPath = await _RecentDocumentsService.add(
+    bytes: finalBytes,
+    fileName: fileName,
+    replacePath: _lastSavedRecentPath,
+  );
+} catch (e) {
+  debugPrint('Recent documents error: $e');
+}
   }
 
   Future<void> _shareFile() async {
@@ -2216,6 +2652,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     String text,
     double fontSize,
     Color color,
+    double widthPt,
   ) async {
     const double pad = _kTextPaddingPt * _kTextPixelRatio;
 
@@ -2225,9 +2662,9 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         style: _labelStyle(fontSize * _kTextPixelRatio, color),
       ),
       textDirection: TextDirection.ltr,
-    )..layout();
+    )..layout(maxWidth: math.max(1.0, (widthPt - 2 * _kTextPaddingPt) * _kTextPixelRatio));
 
-    final int widthPx = math.max(1, (painter.width + pad * 2).ceil());
+    final int widthPx = math.max(1, (widthPt * _kTextPixelRatio).ceil());
     final int heightPx = math.max(1, (painter.height + pad * 2).ceil());
 
     final ui.PictureRecorder recorder = ui.PictureRecorder();
@@ -2294,15 +2731,93 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     }
   }
 
-  /// Подпись или фото -> PNG, повёрнутый на `turns`, в габарит на странице.
+  /// Writes a text label as REAL PDF text (embedded TrueType font), so it can
+  /// be selected, copied and found by search in any PDF reader.
+  ///
+  /// Line breaks are taken from Flutter's own layout, so the saved result is
+  /// identical to what the user saw on screen.
+  void _bakeTextAsVector(
+    PdfPage page,
+    _TextAnnotation a,
+    Uint8List fontData,
+    Map<double, PdfTrueTypeFont> fonts,
+  ) {
+    final _Placement pl = _placementOf(a, page.size);
+    const double ratio = _kTextPixelRatio;
+
+    final TextPainter painter = TextPainter(
+      text: TextSpan(
+        text: a.text,
+        style: _labelStyle(a.fontSize * ratio, a.color),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(
+        maxWidth: math.max(1.0, (a.widthPt - 2 * _kTextPaddingPt) * ratio),
+      );
+
+    final List<ui.LineMetrics> lines = painter.computeLineMetrics();
+    final double fit = pl.fit;
+    final double fontSize = math.max(1.0, a.fontSize * fit);
+    final double fontKey = (fontSize * 100).round() / 100;
+    final PdfTrueTypeFont font = fonts.putIfAbsent(
+      fontKey,
+      () => PdfTrueTypeFont(fontData, fontKey),
+    );
+    final PdfSolidBrush brush = PdfSolidBrush(_pdfColor(a.color));
+    final PdfStringFormat format = PdfStringFormat(
+      wordWrap: PdfWordWrapType.none,
+      lineAlignment: PdfVerticalAlignment.top,
+    );
+
+    final PdfGraphics g = page.graphics;
+    final PdfGraphicsState state = g.save();
+    try {
+      // Move the origin to the label center and rotate like the PNG was.
+      g.translateTransform(pl.center.dx, pl.center.dy);
+      if (a.turns % 4 != 0) g.rotateTransform(90.0 * (a.turns % 4));
+
+      final double left = -pl.content.width / 2;
+      final double top = -pl.content.height / 2;
+
+      int lastEnd = 0;
+      for (final ui.LineMetrics m in lines) {
+        final TextPosition pos = painter.getPositionForOffset(
+          Offset(m.left + 1, m.baseline - m.ascent / 2),
+        );
+        final TextRange range = painter.getLineBoundary(pos);
+        if (range.start < lastEnd || range.end <= range.start) continue;
+        lastEnd = range.end;
+
+        final String line = a.text
+            .substring(range.start, math.min(range.end, a.text.length))
+            .replaceAll(RegExp(r'[\r\n]+$'), '');
+        if (line.trim().isEmpty) continue;
+
+        final double x = left + (_kTextPaddingPt + m.left / ratio) * fit;
+        final double y =
+            top + (_kTextPaddingPt + (m.baseline - m.ascent) / ratio) * fit;
+        g.drawString(
+          line,
+          font,
+          brush: brush,
+          bounds: Rect.fromLTWH(x, y, 0, 0),
+          format: format,
+        );
+      }
+    } finally {
+      g.restore(state);   
+      painter.dispose();
+    }
+  }
+
+  /// Signature or photo -> PNG rotated by `turns`, fitted to its footprint on the page.
   Future<void> _bakePlaced(PdfPage page, _PlacedAnnotation a) async {
     final _Placement pl = _placementOf(a, page.size);
 
     Uint8List png;
     if (a is _TextAnnotation) {
-      // Text is rendered by Flutter and embedded as a transparent PNG. This
-      // makes Cyrillic / Slovak / any script work without a TrueType font.
-      png = (await _renderTextToPng(a.text, a.fontSize, a.color)).bytes;
+      // Fallback only (no TrueType font available): text as a transparent PNG.
+      png = (await _renderTextToPng(a.text, a.fontSize, a.color, a.widthPt)).bytes;
     } else if (a is _ImageAnnotation) {
       png = a.png;
     } else {
@@ -2321,10 +2836,17 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     );
   }
 
-  Future<Uint8List> _bakeAnnotations(Uint8List bytes) async {
+  Future<Uint8List> _bakeAnnotations(
+    Uint8List bytes, {
+    bool embedEditableSource = true,
+  }) async {
     // Snapshot: rendering text is async and the list must not change meanwhile.
     final List<_PageAnnotation> snapshot =
         List<_PageAnnotation>.of(_annotations);
+    if (snapshot.isEmpty) return bytes;
+
+    final Uint8List? fontData = await _PdfTextFont.load();
+    final Map<double, PdfTrueTypeFont> fonts = <double, PdfTrueTypeFont>{};
     final PdfDocument doc = PdfDocument(inputBytes: bytes);
 
     try {
@@ -2342,12 +2864,104 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
       for (final _TextAnnotation t in snapshot.whereType<_TextAnnotation>()) {
         if (t.pageIndex < 0 || t.pageIndex >= doc.pages.count) continue;
+        if (fontData != null) {
+          try {
+            _bakeTextAsVector(doc.pages[t.pageIndex], t, fontData, fonts);
+            continue;
+          } catch (e) {
+            debugPrint('Vector text failed, using PNG fallback: $e');
+          }
+        }
         await _bakePlaced(doc.pages[t.pageIndex], t);
+      }
+
+      // The editable source: original pages + a description of every mark.
+      // Other PDF readers ignore it; this editor restores the marks from it.
+      if (embedEditableSource) {
+        _attachEditableBundle(doc, bytes, snapshot);
       }
 
       return Uint8List.fromList(await doc.save());
     } finally {
       doc.dispose();
+    }
+  }
+
+
+  // =================== EDITABLE SOURCE INSIDE THE PDF ===================
+  void _attachEditableBundle(
+    PdfDocument doc,
+    Uint8List baseBytes,
+    List<_PageAnnotation> items,
+  ) {
+    final List<Map<String, Object?>> json = <Map<String, Object?>>[];
+    final List<Uint8List> images = <Uint8List>[];
+
+    for (final _PageAnnotation a in items) {
+      if (a is _StrokeAnnotation) {
+        json.add(<String, Object?>{
+          't': 'stroke',
+          'p': a.pageIndex,
+          'c': a.color.toARGB32(),
+          'w': a.width,
+          'h': a.isHighlighter,
+          'pts': a.points
+              .map((Offset? o) => o == null ? null : <double>[o.dx, o.dy])
+              .toList(),
+        });
+      } else if (a is _TextAnnotation) {
+        json.add(<String, Object?>{
+          't': 'text',
+          'p': a.pageIndex,
+          'text': a.text,
+          'fs': a.fontSize,
+          'c': a.color.toARGB32(),
+          'w': a.widthPt,
+          'cx': a.center.dx,
+          'cy': a.center.dy,
+          'turns': a.turns,
+        });
+      } else if (a is _ImageAnnotation) {
+        images.add(a.png);
+        json.add(<String, Object?>{
+          't': 'image',
+          'p': a.pageIndex,
+          'img': images.length - 1,
+          'pw': a.pixelWidth,
+          'ph': a.pixelHeight,
+          'w': a.widthPt,
+          'cx': a.center.dx,
+          'cy': a.center.dy,
+          'turns': a.turns,
+        });
+      }
+    }
+
+    final String data = jsonEncode(<String, Object?>{
+      'v': _kEditableFormat,
+      'pageCount': doc.pages.count,
+      'items': json,
+    });
+
+    doc.attachments.add(PdfAttachment(
+      _kEditableBaseName,
+      baseBytes,
+      description: 'PDF Editor: original pages',
+      mimeType: 'application/pdf',
+    ));
+    doc.attachments.add(PdfAttachment(
+      _kEditableDataName,
+      utf8.encode(data),
+      description: 'PDF Editor: editable marks',
+      mimeType: 'application/json',
+    ));
+    for (int i = 0; i < images.length; i++) {
+      doc.attachments.add(PdfAttachment(
+        '$_kEditableImagePrefix$i.png',
+        images[i],
+        description: 'PDF Editor: photo $i',
+        mimeType: 'image/png',
+      ));
     }
   }
 
@@ -2372,6 +2986,9 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
   // =================== ZOOM ===================
   void _resetZoomState() {
+    _stopFling();
+    _panning = false;
+    _velocityTracker = null;
     _zoom = 1;
     _pan = Offset.zero;
     _pinching = false;
@@ -2391,6 +3008,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   }
 
   void _setZoom(double zoom, Offset pan, Size viewport) {
+    _stopFling();
     final double z = zoom.clamp(_kMinZoom, _kMaxZoom).toDouble();
     final Offset p = _clampPan(pan, viewport, z);
     final bool sizeChanged = (z - _zoom).abs() >= 0.001;
@@ -2444,7 +3062,54 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   }
 
   void _resetZoom() => _setZoom(1, Offset.zero, _viewport);
+  void _fitWidth() {
+  if (pdfBytes == null || !_documentLoaded || _pageInfos.isEmpty) {
+    return;
+  }
 
+  final Size vp = _viewport;
+  if (vp.isEmpty) return;
+
+  final int pageIndex =
+      (_currentPage - 1).clamp(0, _pageInfos.length - 1).toInt();
+
+  final Rect page = _pageRect(vp, pageIndex);
+  if (page.width <= 0) return;
+
+  final double targetZoom =
+      (vp.width / page.width).clamp(_kMinZoom, _kMaxZoom).toDouble();
+
+  if (targetZoom <= 1.01) {
+    _resetZoom();
+    return;
+  }
+
+  final Offset targetPan = Offset(
+    -page.left * targetZoom,
+    -page.top * targetZoom,
+  );
+
+  _setZoom(targetZoom, targetPan, vp);
+}
+  void _toggleDoubleTapZoom(Offset position) {
+  if (pdfBytes == null || !_documentLoaded || _busy) return;
+
+  final Size vp = _viewport;
+  if (vp.isEmpty) return;
+
+  if (_zoom > 1.01) {
+    _resetZoom();
+    return;
+  }
+
+  const double targetZoom = 3.0;
+  final double ratio = targetZoom / _zoom;
+
+  final Offset newPan =
+      position - (position - _pan) * ratio;
+
+  _setZoom(targetZoom, newPan, vp);
+}
   void _goToPage(int page) {
     final int target =
         page.clamp(1, math.max(1, _pageInfos.length)).toInt();
@@ -2467,8 +3132,16 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   // A raw Listener is used on purpose: it never enters the gesture arena, so
   // it cannot steal swipes from the viewer or strokes from the pen.
   void _onPointerDown(PointerDownEvent e) {
+    _stopFling(); // a touch stops a running slide immediately
     _pointers[e.pointer] = e.localPosition;
+    if (_pointers.length == 1) {
+      _panning = false;
+      _velocityTracker = VelocityTracker.withKind(e.kind)
+        ..addPosition(e.timeStamp, e.localPosition);
+    }
     if (_pointers.length == 2) {
+      _panning = false;
+      _velocityTracker = null;
       _endStroke();
       _beginPinch();
     }
@@ -2476,6 +3149,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
   void _beginPinch() {
     if (pdfBytes == null || !_documentLoaded || _busy) return;
+    _stopFling();
     final List<Offset> pts = _pointers.values.take(2).toList();
     setState(() {
       _pinching = true;
@@ -2501,6 +3175,8 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         _pointers.length == 1 &&
         _zoom > 1 &&
         _tool == _EditorTool.none) {
+      _velocityTracker?.addPosition(e.timeStamp, e.localPosition);
+      _panning = true;
       setState(() {
         _pan = _clampPan(_pan + e.delta, _viewport, _zoom);
       });
@@ -2508,8 +3184,83 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   }
 
   void _onPointerUp(PointerEvent e) {
+    if (e is PointerUpEvent &&
+    _pointers.length == 1 &&
+    !_pinching &&
+    !_panning &&
+    _tool == _EditorTool.none) {
+
+  final Duration now = e.timeStamp;
+  final Offset position = e.localPosition;
+
+  final bool isDoubleTap =
+      _lastTapTime != null &&
+      _lastTapPosition != null &&
+      (now - _lastTapTime!).inMilliseconds < 300 &&
+      (position - _lastTapPosition!).distance < 40;
+
+  if (isDoubleTap) {
+    _lastTapTime = null;
+    _lastTapPosition = null;
+
+    _toggleDoubleTapZoom(position);
+  } else {
+    _lastTapTime = now;
+    _lastTapPosition = position;
+  }
+}
+    final bool wasPanning = _panning && _pointers.length == 1;
+    final Velocity? velocity = wasPanning && e is PointerUpEvent
+        ? _velocityTracker?.getVelocity()
+        : null;
+
     _pointers.remove(e.pointer);
+    if (_pointers.isEmpty) {
+      _panning = false;
+      _velocityTracker = null;
+    }
     if (_pinching && _pointers.length < 2) _finishPinch();
+
+    // Let the page keep sliding after a quick swipe, like a native scroll.
+    if (velocity != null && !_pinching && _zoom > 1) {
+      _startFling(velocity.pixelsPerSecond);
+    }
+  }
+
+  void _stopFling() {
+    _flingTicker?.stop();
+    _flingX = null;
+    _flingY = null;
+  }
+
+  void _startFling(Offset velocity) {
+    _stopFling();
+    if (velocity.distance < kMinFlingVelocity) return;
+
+    _flingX = FrictionSimulation(_kFlingDrag, _pan.dx, velocity.dx);
+    _flingY = FrictionSimulation(_kFlingDrag, _pan.dy, velocity.dy);
+    _flingTicker ??= createTicker(_onFlingTick);
+    _flingTicker!.start();
+  }
+
+  void _onFlingTick(Duration elapsed) {
+    final FrictionSimulation? fx = _flingX;
+    final FrictionSimulation? fy = _flingY;
+    if (fx == null || fy == null || !mounted || _zoom <= 1 || _pinching) {
+      _stopFling();
+      return;
+    }
+
+    final double t = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+    final Offset raw = Offset(fx.x(t), fy.x(t));
+    final Offset next = _clampPan(raw, _viewport, _zoom);
+
+    // An axis is finished when its slide died out or it hit the page edge.
+    final bool xDone = fx.isDone(t) || (next.dx - raw.dx).abs() > 0.5;
+    final bool yDone = fy.isDone(t) || (next.dy - raw.dy).abs() > 0.5;
+
+    setState(() => _pan = next);
+    if (xDone && yDone) _stopFling();
   }
 
   /// Where a pinch in progress would end up: (zoom, pan).
@@ -2531,6 +3282,208 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     _setZoom(target.$1, target.$2, vp);
   }
 
+
+  // =================== SEARCH ===================
+  void _resetSearchState() {
+    _searchDebounce?.cancel();
+    _searchResult.removeListener(_onSearchChanged);
+    try {
+      _searchResult.clear();
+    } catch (_) {}
+    _searchResult = PdfTextSearchResult();
+    _searchOpen = false;
+    _searchNotFound = false;
+    _searchCopyBytes = null;
+    _pendingSearchQuery = null;
+    _searchedQuery = '';
+    _searchController.clear();
+  }
+
+  /// Opens the search bar. If the document has text labels added by the user,
+  /// the viewer temporarily shows a copy where they are real PDF text -
+  /// that is what lets the search find them.
+  Future<void> _openSearch() async {
+    if (pdfBytes == null || _busy) return;
+    if (_searchOpen) {
+      _searchFocus.requestFocus();
+      return;
+    }
+
+    controller.annotationMode = PdfAnnotationMode.none;
+    setState(() {
+      _searchOpen = true;
+      _tool = _EditorTool.none;
+      _activeStroke = null;
+      _selectedImage = null;
+      _selectedText = null;
+    });
+    _searchFocus.requestFocus();
+
+    final bool hasText = _annotations.whereType<_TextAnnotation>().isNotEmpty;
+    if (!hasText) return;
+
+    await _runExclusive(() async {
+      final Uint8List? base = pdfBytes;
+      if (base == null) return;
+      final Uint8List copy =
+          await _bakeAnnotations(base, embedEditableSource: false);
+      if (!mounted || !_searchOpen) return;
+      setState(() {
+        _searchCopyBytes = copy;
+        _documentLoaded = false;
+        _pendingPage = _currentPage;
+        _documentRevision++;
+        _resetZoomState();
+      });
+    });
+  }
+
+  void _closeSearch() {
+    if (!_searchOpen) return;
+    final bool hadCopy = _searchCopyBytes != null;
+
+    _searchDebounce?.cancel();
+    _searchResult.removeListener(_onSearchChanged);
+    try {
+      _searchResult.clear();
+    } catch (_) {}
+    _searchResult = PdfTextSearchResult();
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    setState(() {
+      _searchOpen = false;
+      _searchNotFound = false;
+      _pendingSearchQuery = null;
+      _searchController.clear();
+      if (hadCopy) {
+        _searchCopyBytes = null;
+        _documentLoaded = false;
+        _pendingPage = _currentPage;
+        _documentRevision++;
+        _resetZoomState();
+      }
+    });
+  }
+
+  void _runSearch(String text) {
+    final String q = text.trim();
+
+    _searchResult.removeListener(_onSearchChanged);
+    try {
+      _searchResult.clear();
+    } catch (_) {}
+    _searchResult = PdfTextSearchResult();
+
+    if (q.isEmpty) {
+      setState(() => _searchNotFound = false);
+      return;
+    }
+
+    // The viewer is still (re)loading: remember the query, run it when ready.
+    if (!_documentLoaded || _busy) {
+      _pendingSearchQuery = q;
+      setState(() => _searchNotFound = false);
+      return;
+    }
+
+    _pendingSearchQuery = null;
+    _searchedQuery = q;
+    final PdfTextSearchResult result = controller.searchText(q);
+    result.addListener(_onSearchChanged);
+    setState(() {
+      _searchResult = result;
+      _searchNotFound = false;
+    });
+  }
+
+  void _flushPendingSearch() {
+    final String? q = _pendingSearchQuery;
+    if (q == null || !mounted || !_searchOpen) return;
+    _runSearch(q);
+  }
+
+  void _onSearchChanged() {
+    if (!mounted) return;
+    setState(() {
+      _searchNotFound =
+          _searchResult.isSearchCompleted && !_searchResult.hasResult;
+    });
+  }
+
+  void _onSearchTextChanged(String text) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted && _searchOpen) _runSearch(text);
+    });
+  }
+
+  void _onSearchSubmitted(String text) {
+    _searchDebounce?.cancel();
+    // Enter on an unchanged query = "next result".
+    if (_searchResult.hasResult && text.trim() == _searchedQuery) {
+      _searchResult.nextInstance();
+    } else {
+      _runSearch(text);
+    }
+  }
+
+  void _searchStep({required bool forward}) {
+    if (!_searchResult.hasResult) return;
+    if (forward) {
+      _searchResult.nextInstance();
+    } else {
+      _searchResult.previousInstance();
+    }
+  }
+
+  PreferredSizeWidget _buildSearchBar(ColorScheme cs) {
+    final bool has = _searchResult.hasResult;
+    final int total = _searchResult.totalInstanceCount;
+    final int current = _searchResult.currentInstanceIndex;
+
+    return AppBar(
+      automaticallyImplyLeading: false,
+      leading: IconButton(
+        tooltip: _tr(context, 'close'),
+        icon: const Icon(Icons.arrow_back_rounded),
+        onPressed: _closeSearch,
+      ),
+      titleSpacing: 0,
+      title: TextField(
+        controller: _searchController,
+        focusNode: _searchFocus,
+        autofocus: true,
+        textInputAction: TextInputAction.search,
+        onChanged: _onSearchTextChanged,
+        onSubmitted: _onSearchSubmitted,
+        decoration: InputDecoration(
+          hintText: _tr(context, 'searchHint'),
+          border: InputBorder.none,
+          suffixText: has
+              ? '$current/$total'
+              : (_searchNotFound ? _tr(context, 'notFound') : null),
+          suffixStyle: TextStyle(
+            color: _searchNotFound ? cs.error : cs.onSurfaceVariant,
+            fontSize: 13,
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        IconButton(
+          tooltip: _tr(context, 'prev'),
+          icon: const Icon(Icons.keyboard_arrow_up_rounded),
+          onPressed: has ? () => _searchStep(forward: false) : null,
+        ),
+        IconButton(
+          tooltip: _tr(context, 'next'),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          onPressed: has ? () => _searchStep(forward: true) : null,
+        ),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
   // =================== UI ===================
   @override
   Widget build(BuildContext context) {
@@ -2539,18 +3492,23 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
 
     return PopScope(
       // Warn before the user accidentally throws away unsaved work.
-      canPop: !_dirty,
+      canPop: !_dirty && !_searchOpen,
       onPopInvokedWithResult: (bool didPop, Object? result) async {
         if (didPop) return;
 
-        // Нажатие в меню выделения текста (Copy / Highlight / ...) не должно
-        // считаться попыткой выйти из документа.
+        if (_searchOpen) {
+          _closeSearch();
+          return;
+        }
+
+        // A tap in the text selection menu (Copy / Highlight / ...) must not
+        // be treated as an attempt to leave the document.
         if (_textSelectionActive) {
           final DateTime before = _lastSelectionEvent;
           await Future<void>.delayed(const Duration(milliseconds: 300));
           if (!mounted) return;
-          // Выделение изменилось -> это было действие из меню. Иначе это
-          // настоящее "назад": как в системе, оно сначала снимает выделение.
+          // Selection changed -> it was a menu action. Otherwise it is a
+          // real "back": as in the system, it first clears the selection.
           if (_lastSelectionEvent == before) controller.clearSelection();
           return;
         }
@@ -2564,7 +3522,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         if (leave) Navigator.of(context).pop();
       },
       child: Scaffold(
-        appBar: _buildAppBar(cs, canAct),
+      appBar: _immersive ? null : _buildAppBar(cs, canAct),
         body: pdfBytes == null
             ? Stack(
                 fit: StackFit.expand,
@@ -2580,12 +3538,16 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                 ],
               )
             : _buildEditorBody(canAct),
-        bottomNavigationBar: pdfBytes == null ? null : _buildBottomBar(canAct),
+        bottomNavigationBar:
+    (pdfBytes == null || _immersive)
+        ? null
+        : _buildBottomBar(canAct),
       ),
     );
   }
 
   PreferredSizeWidget _buildAppBar(ColorScheme cs, bool canAct) {
+    if (_searchOpen && pdfBytes != null) return _buildSearchBar(cs);
     return AppBar(
       titleSpacing: 16,
       title: Row(
@@ -2655,6 +3617,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     icon: const Icon(Icons.language_rounded),
     onSelected: (String value) {
       widget.onLanguageChanged(Locale(value));
+      _LanguageStore.save(value); // remembered for the next launch
     },
     itemBuilder: (BuildContext context) => const [
       PopupMenuItem<String>(
@@ -2681,11 +3644,13 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
           icon: const Icon(Icons.history_rounded),
           onPressed: _busy ? null : _openRecentDocuments,
         ),
+        if (pdfBytes != null)
         IconButton(
           tooltip: context.l10n.share,
           icon: const Icon(Icons.share_rounded),
           onPressed: pdfBytes == null || _busy ? null : _shareFile,
         ),
+        if (pdfBytes != null)
         IconButton(
           tooltip: context.l10n.openFileTypes,
           icon: const Icon(Icons.folder_open_rounded),
@@ -2818,6 +3783,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         // Overlays are only trusted once the viewer has actually loaded the
         // current revision of the document; before that the geometry is stale.
         final bool overlaysReady = _documentLoaded &&
+            _searchCopyBytes == null &&
             _pageInfos.isNotEmpty &&
             currentPageRect != Rect.zero;
         final bool interactive = overlaysReady && !_busy;
@@ -2838,7 +3804,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
             IgnorePointer(
               ignoring: _pinching,
               child: SfPdfViewer.memory(
-                pdfBytes!,
+                _searchCopyBytes ?? pdfBytes!,
                 key: ValueKey<int>(_documentRevision),
                 controller: controller,
                 pageLayoutMode: PdfPageLayoutMode.single,
@@ -2858,6 +3824,8 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                     _documentLoaded = true;
                   });
 
+                  if (target == null) _flushPendingSearch();
+
                   if (target != null) {
                     controller.jumpToPage(target);
                     // Let the viewer finish its layout, then trust it again.
@@ -2870,6 +3838,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                         _currentPage = target;
                         _pendingPage = null;
                       });
+                      _flushPendingSearch();
                     });
                   }
                 },
@@ -3046,12 +4015,25 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                   right: 0,
                   child: Center(child: _buildPagePill(canAct)),
                 ),
-
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: _buildZoomControls(canAct),
-              ),
+Positioned(
+  right: 12,
+  bottom: 12,
+  child: _buildZoomControls(canAct),
+),
+             Positioned(
+  left: 30,
+  top: 12,
+  child: FloatingActionButton.small(
+    heroTag: 'immersive',
+    //tooltip: _immersive ? 'Выйти из полного экрана' : 'Полный экран',
+    onPressed: _toggleImmersive,
+    child: Icon(
+      _immersive
+          ? Icons.fullscreen_exit_rounded
+          : Icons.fullscreen_rounded,
+    ),
+  ),
+),
             ],
           ),
         );
@@ -3108,6 +4090,11 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           IconButton(
+    tooltip: _tr(context, 'fitWidth'),
+  icon: const Icon(Icons.fit_screen_rounded),
+  onPressed: canAct ? _fitWidth : null,
+),
+          IconButton(
             tooltip: context.l10n.zoomIn,
             icon: const Icon(Icons.add_rounded),
             onPressed: canIn ? () => _zoomBy(1.5) : null,
@@ -3138,7 +4125,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
     );
   }
 
-  /// Общая геометрия подписи/фото на экране.
+  /// Shared geometry of a signature/photo on screen.
   ({
     _Placement placement,
     double pageScale,
@@ -3152,7 +4139,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   ) {
     final double pageScale = _pageScale(pageRect, info);
     final _Placement pl = _placementOf(a, info.size);
-    // Элемент повёрнут на (поворот страницы + собственный поворот).
+    // The element is rotated by (page rotation + its own rotation).
     final int totalTurns = (_quarterTurns(info.rotation) + a.turns) % 4;
     final Offset centerScreen = _canonicalToScreen(
       Offset(pl.center.dx / info.size.width, pl.center.dy / info.size.height),
@@ -3176,56 +4163,89 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
   Widget _buildTextOverlay(_TextAnnotation t, Rect pageRect, int pageIndex) {
     final _PageInfo info = _pageInfos[pageIndex];
     final bool editable = _tool == _EditorTool.text;
+    final bool selected = editable && identical(t, _selectedText);
     final g = _screenGeometry(t, pageRect, info);
-
-    // Scale the font AND its padding by the same factor as the saved PNG.
     final double displayScale = g.pageScale * g.placement.fit;
+    final ColorScheme cs = Theme.of(context).colorScheme;
 
-    final Widget label = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: editable ? () => _editText(t) : null,
-      onLongPress: editable ? () => _deleteText(t) : null,
-      onPanUpdate: editable
-          ? (DragUpdateDetails d) =>
-              _movePlaced(t, d.delta, pageRect, pageIndex)
-          : null,
-      child: SizedBox(
-        width: g.box.width,
-        height: g.box.height,
-        // RotatedBox поворачивает содержимое по часовой стрелке и сам
-        // меняет местами ширину/высоту.
-        child: RotatedBox(
-          quarterTurns: g.totalTurns,
-          child: Container(
-            padding: EdgeInsets.all(_kTextPaddingPt * displayScale),
-            decoration: BoxDecoration(
-              color: editable
-                  ? Colors.white.withValues(alpha: 0.55)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            foregroundDecoration: editable
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.7),
-                      width: 1,
-                    ),
-                  )
-                : null,
-            child: Text(
-              t.text,
-              softWrap: false,
-              style: _labelStyle(t.fontSize * displayScale, t.color),
+    final Widget label = SizedBox(
+      width: g.box.width,
+      height: g.box.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: editable ? () {
+                if (selected) {
+                  _editText(t);
+                } else {
+                  setState(() => _selectedText = t);
+                }
+              } : null,
+              onLongPress: editable ? () => _deleteText(t) : null,
+              onPanStart: editable ? (_) => setState(() => _selectedText = t) : null,
+              onPanUpdate: editable
+                  ? (d) => _movePlaced(t, d.delta, pageRect, pageIndex)
+                  : null,
+              child: RotatedBox(
+                quarterTurns: g.totalTurns,
+                child: Container(
+                  padding: EdgeInsets.all(_kTextPaddingPt * displayScale),
+                  color: editable
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.transparent,
+                  child: Text(
+                    t.text,
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                    style: _labelStyle(t.fontSize * displayScale, t.color),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          if (selected)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: cs.primary, width: 2),
+                  ),
+                ),
+              ),
+            ),
+          if (selected)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (d) =>
+                    _resizeTextByDrag(t, d.delta, pageRect, pageIndex),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Center(
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: cs.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(Icons.open_in_full_rounded,
+                          size: 12, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
-
     return Positioned(
       left: g.centerScreen.dx - g.box.width / 2,
       top: g.centerScreen.dy - g.box.height / 2,
@@ -3268,7 +4288,7 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
         clipBehavior: Clip.none,
         children: <Widget>[
           Positioned.fill(
-            // Жесты снаружи поворота: delta всегда в экранных координатах.
+            // Gestures outside the rotation: delta is always in screen coordinates.
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: editable ? () => setState(() => _selectedImage = img) : null,
@@ -3513,6 +4533,11 @@ Future<void> _openPdfBytes(Uint8List bytes) async {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: <Widget>[
+                        _ToolButton(
+                          icon: Icons.search_rounded,
+                          label: _tr(context, 'search'),
+                          onPressed: canAct ? _openSearch : null,
+                        ),
                         _ToolButton(
                           icon: Icons.draw_rounded,
                           label: context.l10n.draw,
@@ -3980,7 +5005,21 @@ class _TextDialogResult {
   final String text;
   final double fontSize;
 }
+class _TextLine {
+  const _TextLine({
+    required this.page,
+    required this.top,
+    required this.bottom,
+    required this.left,
+    required this.text,
+  });
 
+  final int page;
+  final double top;
+  final double bottom;
+  final double left;
+  final String text;
+}
 class _RenderedTextImage {
   const _RenderedTextImage({
     required this.bytes,
@@ -3991,6 +5030,118 @@ class _RenderedTextImage {
   final Uint8List bytes;
   final double widthPoints;
   final double heightPoints;
+}
+
+
+// ===========================================================================
+// Editable source stored inside a saved PDF
+// ===========================================================================
+class _EditableBundle {
+  const _EditableBundle({
+    required this.baseBytes,
+    required this.pageCount,
+    required this.annotations,
+  });
+
+  final Uint8List baseBytes;
+  final int pageCount;
+  final List<_PageAnnotation> annotations;
+}
+
+/// Returns the original pages and the editable marks if [bytes] was saved by
+/// this editor, otherwise null. Never throws.
+_EditableBundle? _readEditableBundle(Uint8List bytes) {
+  PdfDocument? doc;
+  try {
+    doc = PdfDocument(inputBytes: bytes);
+    Uint8List? base;
+    String? dataJson;
+    final Map<int, Uint8List> images = <int, Uint8List>{};
+
+    for (int i = 0; i < doc.attachments.count; i++) {
+      final PdfAttachment att = doc.attachments[i];
+      final String name = att.fileName;
+      if (name == _kEditableBaseName) {
+        base = Uint8List.fromList(att.data);
+      } else if (name == _kEditableDataName) {
+        dataJson = utf8.decode(att.data, allowMalformed: true);
+      } else if (name.startsWith(_kEditableImagePrefix) &&
+          name.endsWith('.png')) {
+        final int? index = int.tryParse(name.substring(
+            _kEditableImagePrefix.length, name.length - '.png'.length));
+        if (index != null) images[index] = Uint8List.fromList(att.data);
+      }
+    }
+    if (base == null || dataJson == null) return null;
+
+    final Object? decoded = jsonDecode(dataJson);
+    if (decoded is! Map<String, dynamic> ||
+        decoded['v'] != _kEditableFormat) {
+      return null;
+    }
+    final int pageCount = (decoded['pageCount'] as num).toInt();
+    final List<_PageAnnotation> result = <_PageAnnotation>[];
+
+    for (final dynamic raw in (decoded['items'] as List<dynamic>)) {
+      final Map<String, dynamic> m = raw as Map<String, dynamic>;
+      final int page = (m['p'] as num).toInt();
+      switch (m['t']) {
+        case 'stroke':
+          final List<dynamic> pts = m['pts'] as List<dynamic>;
+          if (pts.isEmpty) break;
+          Offset? toOffset(dynamic v) => v == null
+              ? null
+              : Offset((v[0] as num).toDouble(), (v[1] as num).toDouble());
+          final Offset first = toOffset(pts.first) ?? Offset.zero;
+          final _StrokeAnnotation stroke = _StrokeAnnotation(
+            pageIndex: page,
+            color: Color((m['c'] as num).toInt()),
+            width: (m['w'] as num).toDouble(),
+            isHighlighter: m['h'] == true,
+            first: first,
+          );
+          stroke.points
+            ..clear()
+            ..addAll(pts.map(toOffset));
+          result.add(stroke);
+        case 'text':
+          result.add(_TextAnnotation(
+            pageIndex: page,
+            text: m['text'] as String,
+            fontSize: (m['fs'] as num).toDouble(),
+            color: Color((m['c'] as num).toInt()),
+            widthPt: (m['w'] as num).toDouble(),
+            center: Offset((m['cx'] as num).toDouble(),
+                (m['cy'] as num).toDouble()),
+            turns: (m['turns'] as num).toInt(),
+          ));
+        case 'image':
+          final Uint8List? png = images[(m['img'] as num).toInt()];
+          if (png == null) return null;
+          result.add(_ImageAnnotation(
+            pageIndex: page,
+            png: png,
+            pixelWidth: (m['pw'] as num).toInt(),
+            pixelHeight: (m['ph'] as num).toInt(),
+            widthPt: (m['w'] as num).toDouble(),
+            center: Offset((m['cx'] as num).toDouble(),
+                (m['cy'] as num).toDouble()),
+            turns: (m['turns'] as num).toInt(),
+          ));
+      }
+    }
+
+    return _EditableBundle(
+      baseBytes: base,
+      pageCount: pageCount,
+      annotations: result,
+    );
+  } catch (e) {
+    debugPrint('Editable source not restored: $e');
+    return null;
+  } finally {
+    doc?.dispose();
+  }
 }
 
 // ===========================================================================
@@ -4033,7 +5184,7 @@ class _StrokeAnnotation extends _PageAnnotation {
   final List<Offset?> points;
 }
 
-/// Подпись или фото: центр + поворот. См. описание над [_quarterTurns].
+/// Signature or photo: center + rotation. See the description above [_quarterTurns].
 abstract class _PlacedAnnotation extends _PageAnnotation {
   _PlacedAnnotation({
     required int pageIndex,
@@ -4041,32 +5192,34 @@ abstract class _PlacedAnnotation extends _PageAnnotation {
     required this.turns,
   }) : super(pageIndex);
 
-  /// Центр в канонических координатах страницы, 0..1.
+  /// Center in canonical page coordinates, 0..1.
   Offset center;
 
-  /// Поворот содержимого относительно канонической страницы (четверти по часовой).
+  /// Rotation of the content relative to the canonical page (clockwise quarter turns).
   final int turns;
 
-  /// Размер содержимого в pt до поворота и уменьшения.
+  /// Content size in pt before rotation and shrinking.
   Size get contentSizePt;
 }
 
-class _TextAnnotation
-    extends _PlacedAnnotation {
+class _TextAnnotation extends _PlacedAnnotation {
   _TextAnnotation({
     required super.pageIndex,
     required this.text,
     required this.fontSize,
     required this.color,
+    required this.widthPt,
     required super.center,
     required super.turns,
   });
   String text;
   double fontSize;
   final Color color;
+  double widthPt;
 
   @override
-  Size get contentSizePt => _measureTextSize(text, fontSize);
+  Size get contentSizePt =>
+      _measureTextSize(text, fontSize, maxWidth: widthPt);
 }
 
 class _ImageAnnotation
@@ -4084,7 +5237,7 @@ class _ImageAnnotation
   final int pixelWidth;
   final int pixelHeight;
 
-  /// Ширина фото на странице в pt (высота считается по пропорциям).
+  /// Photo width on the page in pt (height is computed from the proportions).
   double widthPt;
 
   double get aspect => pixelWidth / pixelHeight;

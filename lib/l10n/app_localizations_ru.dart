@@ -33,7 +33,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get clearList => 'Очистить список';
 
   @override
-  String get clearRecentMessage => 'Локальные копии из списка недавних будут удалены. Исходные файлы не удаляются.';
+  String get clearRecentMessage =>
+      'Локальные копии из списка недавних будут удалены. Исходные файлы не удаляются.';
 
   @override
   String get clearRecentTitle => 'Очистить недавние?';
@@ -58,7 +59,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get couldNotReadFile => 'Не удалось прочитать файл';
 
   @override
-  String get couldNotReadPdf => 'Не удалось прочитать PDF (файл повреждён или защищён паролем)';
+  String get couldNotReadPdf =>
+      'Не удалось прочитать PDF (файл повреждён или защищён паролем)';
 
   @override
   String get delete => 'Удалить';
@@ -119,7 +121,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get highlighterHint => 'Полупрозрачный жёлтый маркер';
 
   @override
-  String get homeDescription => 'Открывай PDF, фото и текстовые файлы. Рисуй, добавляй текст, поворачивай, переставляй и удаляй страницы.';
+  String get homeDescription =>
+      'Открывай PDF, фото и текстовые файлы. Рисуй, добавляй текст, поворачивай, переставляй и удаляй страницы.';
 
   @override
   String get homeTitle => 'Редактируй PDF\nза пару касаний';
@@ -128,7 +131,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get imagePrepareError => 'Не удалось подготовить изображение';
 
   @override
-  String get imageReadError => 'Не удалось прочитать изображение (формат не поддерживается устройством)';
+  String get imageReadError =>
+      'Не удалось прочитать изображение (формат не поддерживается устройством)';
 
   @override
   String get left => 'Влево';
@@ -230,13 +234,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get unsavedChanges => 'Несохранённые изменения';
 
   @override
-  String get unsavedChangesMessage => 'Все несохранённые правки будут потеряны. Продолжить?';
+  String get unsavedChangesMessage =>
+      'Все несохранённые правки будут потеряны. Продолжить?';
 
   @override
-  String get unsavedShareQuestion => 'Есть несохранённые изменения. Что отправить?';
+  String get unsavedShareQuestion =>
+      'Есть несохранённые изменения. Что отправить?';
 
   @override
-  String get unsupportedFormat => 'Этот формат не поддерживается. Откройте PDF, фото или текстовый файл';
+  String get unsupportedFormat =>
+      'Этот формат не поддерживается. Откройте PDF, фото или текстовый файл';
 
   @override
   String get up => 'Вверх';

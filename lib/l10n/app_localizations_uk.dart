@@ -33,7 +33,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearList => 'Очистити список';
 
   @override
-  String get clearRecentMessage => 'Локальні копії зі списку нещодавніх буде видалено. Початкові файли не видаляються.';
+  String get clearRecentMessage =>
+      'Локальні копії зі списку нещодавніх буде видалено. Початкові файли не видаляються.';
 
   @override
   String get clearRecentTitle => 'Очистити нещодавні?';
@@ -58,7 +59,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get couldNotReadFile => 'Не вдалося прочитати файл';
 
   @override
-  String get couldNotReadPdf => 'Не вдалося прочитати PDF (файл пошкоджено або захищено паролем)';
+  String get couldNotReadPdf =>
+      'Не вдалося прочитати PDF (файл пошкоджено або захищено паролем)';
 
   @override
   String get delete => 'Видалити';
@@ -119,7 +121,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get highlighterHint => 'Напівпрозорий жовтий маркер';
 
   @override
-  String get homeDescription => 'Відкривайте PDF, фото та текстові файли. Малюйте, додавайте текст, повертайте, переставляйте та видаляйте сторінки.';
+  String get homeDescription =>
+      'Відкривайте PDF, фото та текстові файли. Малюйте, додавайте текст, повертайте, переставляйте та видаляйте сторінки.';
 
   @override
   String get homeTitle => 'Редагуйте PDF\nза кілька дотиків';
@@ -128,7 +131,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get imagePrepareError => 'Не вдалося підготувати зображення';
 
   @override
-  String get imageReadError => 'Не вдалося прочитати зображення (формат не підтримується пристроєм)';
+  String get imageReadError =>
+      'Не вдалося прочитати зображення (формат не підтримується пристроєм)';
 
   @override
   String get left => 'Ліворуч';
@@ -160,7 +164,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get photo => 'Фото';
 
   @override
-  String get photoHint => 'Торкніться фото, щоб вибрати,\nперетягуйте, щоб перемістити';
+  String get photoHint =>
+      'Торкніться фото, щоб вибрати,\nперетягуйте, щоб перемістити';
 
   @override
   String get previousPage => 'Попередня сторінка';
@@ -207,7 +212,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get tapPageForText => 'Торкніться місця на сторінці, щоб додати текст';
 
   @override
-  String get textEditHint => 'Торкніться, щоб редагувати,\nутримуйте, щоб видалити';
+  String get textEditHint =>
+      'Торкніться, щоб редагувати,\nутримуйте, щоб видалити';
 
   @override
   String get textPrepareError => 'Не вдалося підготувати текст для PDF';
@@ -230,13 +236,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get unsavedChanges => 'Незбережені зміни';
 
   @override
-  String get unsavedChangesMessage => 'Усі незбережені зміни буде втрачено. Продовжити?';
+  String get unsavedChangesMessage =>
+      'Усі незбережені зміни буде втрачено. Продовжити?';
 
   @override
   String get unsavedShareQuestion => 'Є незбережені зміни. Що надіслати?';
 
   @override
-  String get unsupportedFormat => 'Цей формат не підтримується. Відкрийте PDF, фото або текстовий файл';
+  String get unsupportedFormat =>
+      'Цей формат не підтримується. Відкрийте PDF, фото або текстовий файл';
 
   @override
   String get up => 'Вгору';

@@ -33,7 +33,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearList => 'Clear list';
 
   @override
-  String get clearRecentMessage => 'Local copies in the recent list will be deleted. Original files will not be deleted.';
+  String get clearRecentMessage =>
+      'Local copies in the recent list will be deleted. Original files will not be deleted.';
 
   @override
   String get clearRecentTitle => 'Clear recent documents?';
@@ -58,13 +59,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get couldNotReadFile => 'Could not read file';
 
   @override
-  String get couldNotReadPdf => 'Could not read PDF (the file may be damaged or password-protected)';
+  String get couldNotReadPdf =>
+      'Could not read PDF (the file may be damaged or password-protected)';
 
   @override
   String get delete => 'Delete';
 
   @override
-  String get deletePageMessage => 'The page and all edits on it will be deleted.';
+  String get deletePageMessage =>
+      'The page and all edits on it will be deleted.';
 
   @override
   String deletePageTitle(int page) {
@@ -119,7 +122,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get highlighterHint => 'Translucent yellow highlighter';
 
   @override
-  String get homeDescription => 'Open PDF, photo, and text files. Draw, add text, rotate, reorder, and delete pages.';
+  String get homeDescription =>
+      'Open PDF, photo, and text files. Draw, add text, rotate, reorder, and delete pages.';
 
   @override
   String get homeTitle => 'Edit PDFs\nin just a few taps';
@@ -128,7 +132,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get imagePrepareError => 'Could not prepare the image';
 
   @override
-  String get imageReadError => 'Could not read the image (the format is not supported by this device)';
+  String get imageReadError =>
+      'Could not read the image (the format is not supported by this device)';
 
   @override
   String get left => 'Left';
@@ -230,13 +235,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unsavedChanges => 'Unsaved changes';
 
   @override
-  String get unsavedChangesMessage => 'All unsaved edits will be lost. Continue?';
+  String get unsavedChangesMessage =>
+      'All unsaved edits will be lost. Continue?';
 
   @override
-  String get unsavedShareQuestion => 'There are unsaved changes. What would you like to share?';
+  String get unsavedShareQuestion =>
+      'There are unsaved changes. What would you like to share?';
 
   @override
-  String get unsupportedFormat => 'This format is not supported. Open a PDF, photo, or text file';
+  String get unsupportedFormat =>
+      'This format is not supported. Open a PDF, photo, or text file';
 
   @override
   String get up => 'Up';
