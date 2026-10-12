@@ -4089,11 +4089,12 @@ Positioned(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          IconButton(
+          if (MediaQuery.of(context).orientation == Orientation.landscape)
+  IconButton(
     tooltip: _tr(context, 'fitWidth'),
-  icon: const Icon(Icons.fit_screen_rounded),
-  onPressed: canAct ? _fitWidth : null,
-),
+    icon: const Icon(Icons.fit_screen_rounded),
+    onPressed: canAct ? _fitWidth : null,
+  ),
           IconButton(
             tooltip: context.l10n.zoomIn,
             icon: const Icon(Icons.add_rounded),
