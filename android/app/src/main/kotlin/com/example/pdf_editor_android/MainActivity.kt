@@ -1,7 +1,9 @@
+
 package com.example.pdf_editor_android
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -12,8 +14,8 @@ class MainActivity : FlutterActivity() {
 
     private var methodChannel: MethodChannel? = null
 
-    // Если PDF пришёл ещё до того, как Flutter успел создать канал
-    private var pendingPdfBytes: ByteArray? = null
+    // Store the PDF until Flutter is ready to receive it.
+    private var pendingPdf: Map<String, Any>? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -26,31 +28,20 @@ class MainActivity : FlutterActivity() {
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInitialPdf" -> {
-                    val bytes = pendingPdfBytes
+                    val pdf = pendingPdf ?: readPdfFromIntent(intent)
+                    pendingPdf = null
+                    result.success(pdf)
+                }
 
-                    if (bytes != null) {
-                        pendingPdfBytes = null
-                        result.success(bytes)
-                    } else {
-                        val initialBytes = readPdfFromIntent(intent)
-                        result.success(initialBytes)
-                    }
+                "getInitialFileName" -> {
+                    val uri = intent?.data
+                    result.success(
+                        if (uri != null) getFileName(uri) else null
+                    )
                 }
 
                 else -> result.notImplemented()
             }
-        }
-
-        // Если файл уже был передан Android до создания Flutter Engine
-        val bytes = pendingPdfBytes
-
-        if (bytes != null) {
-            pendingPdfBytes = null
-
-            methodChannel?.invokeMethod(
-                "openPdf",
-                bytes
-            )
         }
     }
 
@@ -59,37 +50,71 @@ class MainActivity : FlutterActivity() {
 
         setIntent(intent)
 
-        val bytes = readPdfFromIntent(intent)
+        val pdf = readPdfFromIntent(intent)
 
-        if (bytes != null) {
+        if (pdf != null) {
             if (methodChannel != null) {
                 methodChannel?.invokeMethod(
                     "openPdf",
-                    bytes
+                    pdf
                 )
             } else {
-                pendingPdfBytes = bytes
+                pendingPdf = pdf
             }
         }
     }
 
-    private fun readPdfFromIntent(intent: Intent?): ByteArray? {
-        if (intent == null) return null
-
-        if (intent.action != Intent.ACTION_VIEW) {
+    private fun readPdfFromIntent(intent: Intent?): Map<String, Any>? {
+        if (intent == null || intent.action != Intent.ACTION_VIEW) {
             return null
         }
 
         val uri: Uri = intent.data ?: return null
 
         return try {
-            contentResolver
+            val bytes = contentResolver
                 .openInputStream(uri)
                 ?.use { input ->
                     input.readBytes()
-                }
+                } ?: return null
+
+            val name = getFileName(uri)
+                ?: "document_${System.currentTimeMillis()}.pdf"
+
+            mapOf(
+                "bytes" to bytes,
+                "name" to name
+            )
         } catch (e: Exception) {
             e.printStackTrace()
+            null
+        }
+    }
+
+    private fun getFileName(uri: Uri): String? {
+        return try {
+            var fileName: String? = null
+
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(
+                        OpenableColumns.DISPLAY_NAME
+                    )
+
+                    if (index >= 0) {
+                        fileName = cursor.getString(index)
+                    }
+                }
+            }
+
+            fileName?.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
             null
         }
     }
