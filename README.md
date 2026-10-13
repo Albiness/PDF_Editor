@@ -54,10 +54,12 @@ PDF Editor turns your phone into a lightweight PDF workshop. Open a PDF, a photo
 - 🔢 Page indicator pill with previous / next navigation
 
 ### 🔎 Viewing & navigation
-- **Pinch-to-zoom** (1×–3×) plus zoom in / zoom out / reset controls
+- **Pinch-to-zoom** (1×–2×) plus zoom in / zoom out / reset controls
+- **Double-tap zoom** with a safe 2× cap to reduce excessive raster memory use on mobile
 - **Crisp zoom** — the viewer is re-laid out at the zoomed size, so the PDF is re-rendered sharply instead of just being stretched
 - Smooth two-finger pan while zoomed
 - Built-in **text selection** (copy etc.) that doesn't conflict with the back button
+- 🔎 **Optimised search** — native PDF text is searched by Syncfusion, while text added in the editor is searched directly in memory, avoiding full PDF rebuilds during search
 
 ### 💾 Save & share
 - **Save as PDF** through the system file picker
@@ -68,6 +70,7 @@ PDF Editor turns your phone into a lightweight PDF workshop. Open a PDF, a photo
 ### 🌍 UI & polish
 - Material 3 design with a dedicated indigo colour scheme, light & dark mode
 - Fully **localised** UI (Flutter `l10n` / ARB) with in-app language switching
+- 🌐 **Language persistence** — the selected language is remembered between app launches
 - Floating snackbars, rounded dialogs, tooltips and a clean empty state with quick actions
 
 ---
@@ -92,12 +95,22 @@ This means drawing, text, zoom, rotation, reordering and saving work identically
 ### WYSIWYG annotations
 - All edits live in **one ordered list**, which is what makes undo/redo behave consistently across strokes, text and photos.
 - Coordinates are stored **normalised (0..1) in the original, unrotated page space**, so annotations follow the page when it is rotated, moved or deleted.
-- Text labels are rasterised at **3× pixel ratio** and use the *same padding and font metrics* for the on-screen preview and the saved PNG — what you see is exactly what you get.
+- Text labels use the same layout metrics on screen and in the saved document. When the bundled TrueType font is available, labels are written as **real PDF text**, so they remain selectable, copyable and searchable in normal PDF readers.
 - Placed items (text/photos) store a centre point and a quarter-turn offset, so a label added on an already-rotated page looks upright and rotates with the page afterwards.
-- On save, strokes, highlights, text and photos are **baked into the PDF page graphics**; the highlighter uses a real `PdfBlendMode.multiply` with transparency.
+- On save, strokes, highlights, text and photos are baked into the visible PDF page graphics; the highlighter uses a real `PdfBlendMode.multiply` with transparency.
+- Saved files also carry a compact **editable source bundle** with the original pages and annotation metadata. Re-opening a PDF saved by the app restores supported annotations as editable objects instead of flattening the editing workflow permanently.
+
+
+### Fast hybrid search
+- Original PDF text is searched with `PdfViewerController.searchText(...)`.
+- Text added in the editor is searched directly in `_TextAnnotation` objects already held in memory.
+- The search bar uses a short debounce before running a query.
+- Searching added text does **not** call `_bakeAnnotations()` and does not generate or reload a temporary PDF copy, which significantly reduces freezes on larger documents.
+- Search navigation can jump to both native PDF matches and editor-added text matches.
 
 ### Safe, race-free editing
-- Heavy operations (rotate / move / delete / save) run through an **exclusive executor** (`_busy` flag) to prevent double-tap races on the same bytes.
+- Heavy operations (rotate / move / delete / save) run through an **exclusive executor** (`_busy` flag) to prevent competing edits on the same bytes.
+- Zoom is capped at **2×** to reduce the risk of very large viewer raster allocations on Android devices.
 - Page re-ordering recreates pages with **zero margins** to avoid the 40 pt shift that default margins would accumulate.
 - Viewer page events are suppressed right after reloads to avoid the viewer briefly reporting the wrong page.
 
@@ -109,7 +122,7 @@ This means drawing, text, zoom, rotation, reordering and saving work identically
 |---------|---------|
 | [`flutter`](https://flutter.dev) | UI framework (Material 3) |
 | [`syncfusion_flutter_pdf`](https://pub.dev/packages/syncfusion_flutter_pdf) | Creating & editing PDF documents, baking annotations |
-| [`syncfusion_flutter_pdfviewer`](https://pub.dev/packages/syncfusion_flutter_pdfviewer) | PDF rendering & text selection |
+| [`syncfusion_flutter_pdfviewer`](https://pub.dev/packages/syncfusion_flutter_pdfviewer) | PDF rendering, native text search & text selection |
 | [`file_picker`](https://pub.dev/packages/file_picker) | Opening and saving files |
 | [`share_plus`](https://pub.dev/packages/share_plus) | Native share sheet |
 | [`path_provider`](https://pub.dev/packages/path_provider) | Local storage for recent documents |
@@ -177,7 +190,8 @@ Key building blocks inside the editor:
 - **File layer** — `_detectFileKind`, `_convertToPdf`, `_imageToPdf`, `_textToPdf`
 - **Models** — `_StrokeAnnotation`, `_TextAnnotation`, `_ImageAnnotation`
 - **Rendering** — `_StrokePainter`, `_Placement` (shared preview/save geometry)
-- **Services** — `_RecentDocumentsService` (local history, max 20 items)
+- **Services** — `_RecentDocumentsService` (local history, max 20 items), `_LanguageStore` (saved UI language)
+- **Search** — hybrid native-PDF + in-memory annotation search
 - **UI** — `_PdfEditorView`, `_AddTextDialog`, `_ToolButton`, `_ColorDot`
 
 ---
